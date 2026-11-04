@@ -28,6 +28,7 @@ local simulatedDate = "2026-11-04"
 local clock = 0
 local savedDB
 local taxiHook
+local guildMessages = {}
 
 local function shallowCopy(source)
     local copy = {}
@@ -114,6 +115,9 @@ local function installWoWMocks(createdFrames, namedFrames)
     _G.UnitFullName = function() return "Testhero", "Testrealm" end
     _G.GetGuildInfo = function() return nil end
     _G.IsInGuild = function() return false end
+    _G.SendChatMessage = function(message, channel)
+        table.insert(guildMessages, { message = message, channel = channel })
+    end
     _G.GetTime = function() clock = clock + 1; return clock end
     _G.time = os.time
     _G.date = function() return simulatedDate end
@@ -134,14 +138,14 @@ local function startSession(dateKey, seed, difficulty)
     math.randomseed(seed)
     local createdFrames, namedFrames = {}, {}
     installWoWMocks(createdFrames, namedFrames)
-    _G.GuildFitWheelDB = savedDB
+    _G.HoppdebaeseDB = savedDB
 
     local chunk = assert(loadfile(addonPath))
     chunk("Hoppdebaese")
     local addon = createdFrames[1]
     assert(addon and addon.scripts.OnEvent, "Addon event frame was not created")
     addon.scripts.OnEvent(addon, "ADDON_LOADED", "Hoppdebaese")
-    GuildFitWheelDB.difficulty = difficulty
+    HoppdebaeseDB.difficulty = difficulty
     addon.scripts.OnEvent(addon, "PLAYER_LOGIN")
 
     return {
@@ -163,16 +167,18 @@ local function runPrompt(session, eventName, label, level, shouldSwap)
         session.addon.scripts.OnEvent(session.addon, eventName, level)
     end
 
-    local mainFrame = assert(session.named.GuildFitWheelFrame, "Main window was not created")
-    assert(mainFrame.scripts.OnUpdate, "Spin update handler is missing")
-    mainFrame.scripts.OnUpdate(mainFrame, 2.1)
+    local mainFrame = assert(session.named.HoppdebaeseBoxFrame, "Main box window was not created")
+    assert(mainFrame.scripts.OnUpdate, "Box update handler is missing")
+    for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 
-    local first = assert(session.addon.currentChallenge, "Spin did not select a challenge")
+    local first = assert(session.addon.currentChallenge, "Box did not select a challenge")
+    assert(first == session.addon.boxItems[3], "Selected challenge is not the visible center row")
     local swappedFrom
     if shouldSwap and dailyGoals[first.id] then
         swappedFrom = first.text
         session.swap.scripts.OnClick(session.swap)
         assert(session.addon.sessionDisabled[first.id], "Rest & Swap did not disable " .. first.id)
+        for _ = 1, 50 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
     end
 
     local selected = assert(session.addon.currentChallenge, "No challenge selected after swap")
@@ -265,7 +271,7 @@ local function runDifficulty(difficulty)
             runPrompt(session, event[1], event[2], event[3], event[4])
         end
         expectedPrompts = expectedPrompts + #definition.events
-        savedDB = GuildFitWheelDB
+        savedDB = HoppdebaeseDB
 
         print("\n" .. definition.title .. " (" .. definition.date .. ")")
         local sessionLevelUps = 0
@@ -380,10 +386,10 @@ local distributionSession = startSession("2026-11-07", 404, "medium")
 local distributionTotal = 2000
 local stapleHits = 0
 local stapleCounts = { squats = 0, situps = 0, pushups = 0 }
-local mainFrame = assert(distributionSession.named.GuildFitWheelFrame)
+local mainFrame = assert(distributionSession.named.HoppdebaeseBoxFrame)
 for _ = 1, distributionTotal do
     distributionSession.addon:ShowChallenge("manual")
-    mainFrame.scripts.OnUpdate(mainFrame, 2.1)
+    for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
     local id = distributionSession.addon.currentChallenge.id
     if stapleCounts[id] then
         stapleCounts[id] = stapleCounts[id] + 1
@@ -394,7 +400,7 @@ end
 local stapleShare = stapleHits / distributionTotal
 assert(stapleShare > 0.24, string.format("Weighted staple share too low: %.1f%%", stapleShare * 100))
 assert(stapleShare < 0.35, string.format("Weighted staple share too high: %.1f%%", stapleShare * 100))
-print("\nWeighted selection over " .. distributionTotal .. " unchanged-pool spins:")
+print("\nWeighted selection over " .. distributionTotal .. " unchanged-pool rolls:")
 print(string.format(
     "    Squats: %d  |  Sit-ups: %d  |  Push-ups: %d  |  Combined: %.1f%%",
     stapleCounts.squats,
@@ -402,4 +408,38 @@ print(string.format(
     stapleCounts.pushups,
     stapleShare * 100
 ))
+
+-- Verify popup delay and center-row commitment independently of the session data.
+distributionSession.addon:ShowChallenge("manual")
+local initialBottom = distributionSession.addon.boxItems[5]
+for _ = 1, 8 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+assert(distributionSession.addon.boxItems[5] == initialBottom, "Box moved before the 0.45 second delay")
+for _ = 1, 52 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+assert(distributionSession.addon.currentChallenge == distributionSession.addon.boxItems[3])
+
+-- Exactly the tenth completed quest should open the box; disabled triggers keep counting.
+mainFrame:Hide()
+for _ = 1, 9 do distributionSession.addon.scripts.OnEvent(distributionSession.addon, "QUEST_TURNED_IN") end
+assert(not mainFrame:IsShown(), "Quest box opened before ten completed quests")
+distributionSession.addon.scripts.OnEvent(distributionSession.addon, "QUEST_TURNED_IN")
+assert(mainFrame:IsShown(), "Tenth completed quest did not open the box")
+for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+mainFrame:Hide()
+HoppdebaeseDB.triggers.quests = false
+for _ = 1, 10 do distributionSession.addon.scripts.OnEvent(distributionSession.addon, "QUEST_TURNED_IN") end
+assert(HoppdebaeseDB.questsCompleted == 20, "Quest counter did not continue while disabled")
+assert(not mainFrame:IsShown(), "Disabled quest trigger opened the box")
+
+-- Guild announcements occur once for a selected center item and respect the toggle.
+_G.IsInGuild = function() return true end
+guildMessages = {}
+HoppdebaeseDB.announceGuild = true
+distributionSession.addon:ShowChallenge("manual")
+for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+assert(#guildMessages == 1 and guildMessages[1].channel == "GUILD", "Guild announcement missing")
+HoppdebaeseDB.announceGuild = false
+distributionSession.addon:ShowChallenge("manual")
+for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+assert(#guildMessages == 1, "Disabled guild announcements still sent a message")
+
 print("ALL_DIFFICULTIES_SIMULATION_PASS")

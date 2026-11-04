@@ -12,6 +12,8 @@ local DEFAULTS = {
     completionCounts = {},
     guildStats = {},
     completedChallenges = 0,
+    questsCompleted = 0,
+    announceGuild = true,
     daily = {
         date = "",
         stats = {},
@@ -21,6 +23,7 @@ local DEFAULTS = {
         death = true,
         flight = true,
         dungeon = true,
+        quests = true,
     },
     tools = {
         bench = false,
@@ -41,44 +44,57 @@ local DEFAULTS = {
 -- Early-level rolls stay approachable, while the daily goals below prevent the
 -- weighted staple exercises from accumulating unreasonable volume in one day.
 local LEVEL_TIERS = {
-    { maxLevel = 10, counts = { 6, 8, 10 }, seconds = { 20, 25, 30 }, toolCounts = { 5, 6, 8 } },
-    { maxLevel = 20, counts = { 10, 12, 15 }, seconds = { 25, 30, 40 }, toolCounts = { 8, 10, 12 } },
-    { maxLevel = 30, counts = { 12, 15, 18 }, seconds = { 30, 40, 50 }, toolCounts = { 10, 12, 15 } },
-    { maxLevel = 40, counts = { 15, 18, 22 }, seconds = { 40, 50, 60 }, toolCounts = { 12, 15, 18 } },
-    { maxLevel = 50, counts = { 18, 22, 25 }, seconds = { 50, 60, 75 }, toolCounts = { 15, 18, 20 } },
-    { maxLevel = 999, counts = { 20, 25, 30 }, seconds = { 60, 75, 90 }, toolCounts = { 18, 20, 24 } },
+    { maxLevel = 10, counts = { min = 5, max = 12 }, seconds = { min = 15, max = 35 }, toolCounts = { min = 5, max = 10 } },
+    { maxLevel = 20, counts = { min = 8, max = 18 }, seconds = { min = 20, max = 50 }, toolCounts = { min = 7, max = 15 } },
+    { maxLevel = 30, counts = { min = 10, max = 22 }, seconds = { min = 25, max = 60 }, toolCounts = { min = 8, max = 18 } },
+    { maxLevel = 40, counts = { min = 12, max = 26 }, seconds = { min = 30, max = 75 }, toolCounts = { min = 10, max = 22 } },
+    { maxLevel = 50, counts = { min = 15, max = 30 }, seconds = { min = 40, max = 90 }, toolCounts = { min = 12, max = 25 } },
+    { maxLevel = 999, counts = { min = 18, max = 35 }, seconds = { min = 45, max = 105 }, toolCounts = { min = 15, max = 30 } },
+}
+
+local ICONS = {
+    strength = "Interface\\Icons\\Ability_Warrior_InnerRage",
+    movement = "Interface\\Icons\\Ability_Rogue_Sprint",
+    core = "Interface\\Icons\\Spell_Holy_BlessingOfStrength",
+    weights = "Interface\\Icons\\INV_Stone_WeightStone_03",
+    water = "Interface\\Icons\\INV_Drink_18",
+    recovery = "Interface\\Icons\\Spell_Nature_Sleep",
 }
 
 local EXERCISES = {
-    { id = "squats", code = "sq", name = "Squats", label = "%d squats", value = "counts", unit = "reps", weight = 1.5 },
-    { id = "situps", code = "su", name = "Sit-ups", label = "%d sit-ups", value = "counts", unit = "reps", weight = 1.5 },
-    { id = "wallSit", code = "ws", name = "Wall sit", label = "%d sec wall sit", value = "seconds", unit = "sec" },
-    { id = "pushups", code = "pu", name = "Push-ups", label = "%d push-ups", value = "counts", unit = "reps", weight = 1.5, amountMultiplier = 1.6 },
-    { id = "jumpingJacks", code = "jj", name = "Jumping jacks", label = "%d jumping jacks", value = "counts", unit = "reps" },
-    { id = "plank", code = "pl", name = "Plank", label = "%d sec plank", value = "seconds", unit = "sec" },
-    { id = "reverseLunges", code = "rl", name = "Reverse lunges", label = "%d reverse lunges", value = "counts", unit = "reps" },
-    { id = "calfRaises", code = "cr", name = "Calf raises", label = "%d calf raises", value = "counts", unit = "reps" },
-    { id = "gluteBridges", code = "gb", name = "Glute bridges", label = "%d glute bridges", value = "counts", unit = "reps" },
-    { id = "birdDogs", code = "bd", name = "Bird-dogs", label = "%d bird-dogs", value = "counts", unit = "reps" },
-    { id = "mountainClimbers", code = "mc", name = "Mountain climbers", label = "%d mountain climbers", value = "counts", unit = "reps" },
-    { id = "highKnees", code = "hk", name = "High knees", label = "%d high knees", value = "counts", unit = "reps" },
-    { id = "deadBugs", code = "db", name = "Dead bugs", label = "%d dead bugs", value = "counts", unit = "reps" },
-    { id = "sidePlank", code = "sp", name = "Side plank", label = "%d sec side plank", value = "seconds", unit = "sec" },
-    { id = "benchPress", code = "bp", name = "Bench presses", label = "%d bench presses", value = "toolCounts", unit = "reps", tool = "bench" },
-    { id = "pullups", code = "up", name = "Pull-ups", label = "%d pull-ups", value = "toolCounts", unit = "reps", tool = "pullupBar" },
-    { id = "dumbbellCurls", code = "dc", name = "Dumbbell curls", label = "%d dumbbell curls", value = "toolCounts", unit = "reps", tool = "dumbbells" },
-    { id = "dumbbellRows", code = "dr", name = "Dumbbell rows", label = "%d dumbbell rows", value = "toolCounts", unit = "reps", tool = "dumbbells" },
-    { id = "treadmillWalk", code = "tw", name = "Treadmill walk", label = "%d min treadmill walk", fixedValues = { 2, 3, 5 }, unit = "min", tool = "treadmill" },
-    { id = "treadmillRun", code = "tr", name = "Treadmill run", label = "%d min treadmill run", fixedValues = { 1, 2, 3 }, unit = "min", tool = "treadmill" },
+    { id = "squats", code = "sq", name = "Squats", label = "%d squats", value = "counts", unit = "reps", weight = 1.5, icon = ICONS.movement },
+    { id = "situps", code = "su", name = "Sit-ups", label = "%d sit-ups", value = "counts", unit = "reps", weight = 1.5, icon = ICONS.core },
+    { id = "wallSit", code = "ws", name = "Wall sit", label = "%d sec wall sit", value = "seconds", unit = "sec", icon = ICONS.core },
+    { id = "pushups", code = "pu", name = "Push-ups", label = "%d push-ups", value = "counts", unit = "reps", weight = 1.5, amountMultiplier = 1.6, icon = ICONS.strength },
+    { id = "jumpingJacks", code = "jj", name = "Jumping jacks", label = "%d jumping jacks", value = "counts", unit = "reps", icon = ICONS.movement },
+    { id = "plank", code = "pl", name = "Plank", label = "%d sec plank", value = "seconds", unit = "sec", icon = ICONS.core },
+    { id = "reverseLunges", code = "rl", name = "Reverse lunges", label = "%d reverse lunges", value = "counts", unit = "reps", icon = ICONS.movement },
+    { id = "calfRaises", code = "cr", name = "Calf raises", label = "%d calf raises", value = "counts", unit = "reps", icon = ICONS.movement },
+    { id = "gluteBridges", code = "gb", name = "Glute bridges", label = "%d glute bridges", value = "counts", unit = "reps", icon = ICONS.core },
+    { id = "birdDogs", code = "bd", name = "Bird-dogs", label = "%d bird-dogs", value = "counts", unit = "reps", icon = ICONS.core },
+    { id = "mountainClimbers", code = "mc", name = "Mountain climbers", label = "%d mountain climbers", value = "counts", unit = "reps", icon = ICONS.movement },
+    { id = "highKnees", code = "hk", name = "High knees", label = "%d high knees", value = "counts", unit = "reps", icon = ICONS.movement },
+    { id = "deadBugs", code = "db", name = "Dead bugs", label = "%d dead bugs", value = "counts", unit = "reps", icon = ICONS.core },
+    { id = "sidePlank", code = "sp", name = "Side plank", label = "%d sec side plank", value = "seconds", unit = "sec", icon = ICONS.core },
+    { id = "benchPress", code = "bp", name = "Bench presses", label = "%d bench presses", value = "toolCounts", unit = "reps", tool = "bench", icon = ICONS.weights },
+    { id = "pullups", code = "up", name = "Pull-ups", label = "%d pull-ups", value = "toolCounts", unit = "reps", tool = "pullupBar", icon = ICONS.strength },
+    { id = "dumbbellCurls", code = "dc", name = "Dumbbell curls", label = "%d dumbbell curls", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
+    { id = "dumbbellRows", code = "dr", name = "Dumbbell rows", label = "%d dumbbell rows", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
+    { id = "seatedShoulderPress", code = "ds", name = "Seated dumbbell shoulder presses", label = "%d seated dumbbell shoulder presses", value = "toolCounts", unit = "reps", tools = { "bench", "dumbbells" }, icon = ICONS.weights },
+    { id = "lateralRaises", code = "lr", name = "Lateral raises", label = "%d lateral raises", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
+    { id = "overheadTriceps", code = "ot", name = "Overhead triceps extensions", label = "%d overhead triceps extensions", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
+    { id = "hammerCurls", code = "hc", name = "Hammer curls", label = "%d hammer curls", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
+    { id = "treadmillWalk", code = "tw", name = "Treadmill walk", label = "%d min treadmill walk", fixedValues = { min = 5, max = 15 }, unit = "min", tool = "treadmill", icon = ICONS.movement },
+    { id = "treadmillRun", code = "tr", name = "Treadmill run", label = "%d min treadmill run", fixedValues = { min = 3, max = 10 }, unit = "min", tool = "treadmill", icon = ICONS.movement },
 }
 
 local EASY_CHALLENGES = {
-    { id = "water", code = "wa", name = "Glasses of water", text = "Drink a glass of water", amount = 1, unit = "glasses" },
-    { id = "stretch", code = "st", name = "Stretching", label = "Stand and stretch for %d seconds", values = { 20, 30, 45 }, unit = "sec" },
-    { id = "shoulders", code = "sr", name = "Shoulder rolls", label = "%d slow shoulder rolls", values = { 6, 8, 10 }, unit = "reps" },
-    { id = "breathing", code = "br", name = "Deep breaths", label = "Take %d slow, deep breaths", values = { 3, 4, 5 }, unit = "breaths" },
-    { id = "eyeRest", code = "er", name = "Eye rest", text = "Look at something far away for 20 seconds", amount = 20, unit = "sec" },
-    { id = "shower", code = "sh", name = "Showers", text = "Take a shower", amount = 1, unit = "times" },
+    { id = "water", code = "wa", name = "Glasses of water", text = "Drink a glass of water", amount = 1, unit = "glasses", icon = ICONS.water },
+    { id = "stretch", code = "st", name = "Stretching", label = "Stand and stretch for %d seconds", values = { min = 20, max = 60 }, unit = "sec", icon = ICONS.recovery },
+    { id = "shoulders", code = "sr", name = "Shoulder rolls", label = "%d slow shoulder rolls", values = { min = 6, max = 12 }, unit = "reps", icon = ICONS.recovery },
+    { id = "breathing", code = "br", name = "Deep breaths", label = "Take %d slow, deep breaths", values = { min = 3, max = 6 }, unit = "breaths", icon = ICONS.recovery },
+    { id = "eyeRest", code = "er", name = "Eye rest", text = "Look at something far away for 20 seconds", amount = 20, unit = "sec", icon = ICONS.recovery },
+    { id = "shower", code = "sh", name = "Showers", text = "Take a shower", amount = 1, unit = "times", icon = ICONS.water },
 }
 
 local TRIGGER_INFO = {
@@ -86,6 +102,7 @@ local TRIGGER_INFO = {
     death = { title = "Defeat Recovery Challenge", multiplier = 1.35 },
     flight = { title = "Flight Path Challenge", multiplier = 0.75 },
     dungeon = { title = "Dungeon Complete Challenge", multiplier = 1.2 },
+    quest = { title = "10 Quests Complete Challenge", multiplier = 1 },
     manual = { title = "Workout Challenge", multiplier = 1 },
 }
 
@@ -118,8 +135,12 @@ local DAILY_GOALS = {
     pullups = { easy = 8, medium = 12, hard = 18, extreme = 36 },
     dumbbellCurls = { easy = 20, medium = 30, hard = 45, extreme = 90 },
     dumbbellRows = { easy = 20, medium = 30, hard = 45, extreme = 90 },
-    treadmillWalk = { easy = 10, medium = 15, hard = 22, extreme = 44 },
-    treadmillRun = { easy = 6, medium = 10, hard = 15, extreme = 30 },
+    seatedShoulderPress = { easy = 16, medium = 28, hard = 42, extreme = 84 },
+    lateralRaises = { easy = 16, medium = 24, hard = 36, extreme = 72 },
+    overheadTriceps = { easy = 16, medium = 24, hard = 36, extreme = 72 },
+    hammerCurls = { easy = 20, medium = 30, hard = 45, extreme = 90 },
+    treadmillWalk = { easy = 20, medium = 30, hard = 45, extreme = 90 },
+    treadmillRun = { easy = 12, medium = 20, hard = 30, extreme = 60 },
 }
 
 local REST_CHALLENGE_IDS = { "stretch", "water", "eyeRest" }
@@ -172,6 +193,11 @@ local function Pick(list)
     return list[math.random(1, #list)]
 end
 
+local function PickValue(values)
+    if values.min and values.max then return math.random(values.min, values.max) end
+    return Pick(values)
+end
+
 local function PickWeighted(list)
     local totalWeight = 0
     for _, challenge in ipairs(list) do totalWeight = totalWeight + (challenge.weight or 1) end
@@ -185,21 +211,21 @@ end
 
 local function EnsureDailyState()
     local today = date and date("%Y-%m-%d") or "session"
-    if GuildFitWheelDB.daily.date ~= today then
-        GuildFitWheelDB.daily.date = today
-        GuildFitWheelDB.daily.stats = {}
+    if HoppdebaeseDB.daily.date ~= today then
+        HoppdebaeseDB.daily.date = today
+        HoppdebaeseDB.daily.stats = {}
     end
 end
 
 local function GetDailyGoal(exerciseID)
     local goals = DAILY_GOALS[exerciseID]
     if not goals then return nil end
-    return goals[GuildFitWheelDB.difficulty] or goals.medium
+    return goals[HoppdebaeseDB.difficulty] or goals.medium
 end
 
 local function GetDailyAmount(exerciseID)
     EnsureDailyState()
-    return tonumber(GuildFitWheelDB.daily.stats[exerciseID]) or 0
+    return tonumber(HoppdebaeseDB.daily.stats[exerciseID]) or 0
 end
 
 local function GetRemainingDailyGoal(exerciseID)
@@ -209,7 +235,12 @@ local function GetRemainingDailyGoal(exerciseID)
 end
 
 local function IsExerciseAvailable(exercise)
-    if exercise.tool and not GuildFitWheelDB.tools[exercise.tool] then return false end
+    if exercise.tool and not HoppdebaeseDB.tools[exercise.tool] then return false end
+    if exercise.tools then
+        for _, tool in ipairs(exercise.tools) do
+            if not HoppdebaeseDB.tools[tool] then return false end
+        end
+    end
     if addon.sessionDisabled and addon.sessionDisabled[exercise.id] then return false end
     local remaining = GetRemainingDailyGoal(exercise.id)
     return remaining == nil or remaining > 0
@@ -227,12 +258,13 @@ local function BuildChallenge(exercise, tier, multiplier)
             text = exercise.text,
             amount = amount,
             unit = exercise.unit,
+            icon = exercise.icon,
         }
     end
 
     local values = exercise.values or exercise.fixedValues or tier[exercise.value]
     local amountMultiplier = exercise.amountMultiplier or 1
-    local amount = math.max(1, math.floor((Pick(values) * multiplier * amountMultiplier) + 0.5))
+    local amount = math.max(1, math.floor((PickValue(values) * multiplier * amountMultiplier) + 0.5))
     local remaining = GetRemainingDailyGoal(exercise.id)
     if remaining then amount = math.min(amount, remaining) end
     return {
@@ -242,12 +274,13 @@ local function BuildChallenge(exercise, tier, multiplier)
         text = string.format(exercise.label, amount),
         amount = amount,
         unit = exercise.unit,
+        icon = exercise.icon,
     }
 end
 
 local function RollChallenge(triggerKey, excludedID)
     local trigger = TRIGGER_INFO[triggerKey] or TRIGGER_INFO.manual
-    local difficulty = DIFFICULTIES[GuildFitWheelDB.difficulty] or DIFFICULTIES.medium
+    local difficulty = DIFFICULTIES[HoppdebaeseDB.difficulty] or DIFFICULTIES.medium
     local tier = GetTier(addon.pendingLevel or GetPlayerLevel())
     local multiplier = difficulty.multiplier * trigger.multiplier
     local pool = {}
@@ -311,39 +344,55 @@ local function ToBase36(value)
     return encoded
 end
 
+local function BuildMessageChunks(header, values)
+    local messages = {}
+    local current = header
+    for _, value in ipairs(values) do
+        local separator = current == header and "" or ","
+        if #current + #separator + #value > 230 then
+            table.insert(messages, current)
+            current = header .. value
+        else
+            current = current .. separator .. value
+        end
+    end
+    table.insert(messages, current)
+    return messages
+end
+
 local function SerializeStats()
-    local values = { "z=" .. ToBase36(GuildFitWheelDB.completedChallenges or 0) }
+    local values = { "z=" .. ToBase36(HoppdebaeseDB.completedChallenges or 0) }
     for _, challenge in ipairs(ALL_CHALLENGES) do
-        local amount = math.floor(tonumber(GuildFitWheelDB.stats[challenge.id]) or 0)
+        local amount = math.floor(tonumber(HoppdebaeseDB.stats[challenge.id]) or 0)
         if amount > 0 then
             table.insert(values, challenge.code .. "=" .. ToBase36(amount))
         end
     end
-    return "S|" .. GuildFitWheelDB.difficulty .. "|" .. table.concat(values, ",")
+    return BuildMessageChunks("S|" .. HoppdebaeseDB.difficulty .. "|", values)
 end
 
 local function SerializeCompletionCounts()
     local values = {}
     for _, challenge in ipairs(ALL_CHALLENGES) do
-        local count = math.floor(tonumber(GuildFitWheelDB.completionCounts[challenge.id]) or 0)
+        local count = math.floor(tonumber(HoppdebaeseDB.completionCounts[challenge.id]) or 0)
         if count > 0 then table.insert(values, challenge.code .. "=" .. ToBase36(count)) end
     end
-    return "C|" .. table.concat(values, ",")
+    return BuildMessageChunks("C|", values)
 end
 
 local function BroadcastStats(force)
     local now = GetTime and GetTime() or 0
     if not force and addon.lastBroadcast and (now - addon.lastBroadcast) < 3 then return end
     addon.lastBroadcast = now
-    SendGuildMessage(SerializeStats())
-    SendGuildMessage(SerializeCompletionCounts())
+    for _, message in ipairs(SerializeStats()) do SendGuildMessage(message) end
+    for _, message in ipairs(SerializeCompletionCounts()) do SendGuildMessage(message) end
 end
 
 local function EnsureGuildIdentity()
     local guildName = GetGuildInfo and GetGuildInfo("player") or nil
-    if GuildFitWheelDB.guildName ~= guildName then
-        GuildFitWheelDB.guildName = guildName
-        GuildFitWheelDB.guildStats = {}
+    if HoppdebaeseDB.guildName ~= guildName then
+        HoppdebaeseDB.guildName = guildName
+        HoppdebaeseDB.guildStats = {}
     end
 end
 
@@ -361,8 +410,9 @@ local function StoreGuildStats(sender, message)
     local difficulty, payload = message:match("^S|([^|]+)|(.*)$")
     if not difficulty or not DIFFICULTIES[difficulty] then return end
 
-    local stats = {}
-    local completed = 0
+    local existing = HoppdebaeseDB.guildStats[sender]
+    local stats = existing and existing.stats or {}
+    local completed = existing and existing.completedChallenges or 0
     for pair in payload:gmatch("[^,]+") do
         local code, rawAmount = pair:match("^([%a]+)=([%da-z]+)$")
         local amount = math.min(tonumber(rawAmount, 36) or 0, 9999999)
@@ -373,8 +423,7 @@ local function StoreGuildStats(sender, message)
         end
     end
 
-    local existing = GuildFitWheelDB.guildStats[sender]
-    GuildFitWheelDB.guildStats[sender] = {
+    HoppdebaeseDB.guildStats[sender] = {
         difficulty = difficulty,
         completedChallenges = completed,
         stats = stats,
@@ -388,35 +437,36 @@ local function StoreGuildCompletionCounts(sender, message)
     local payload = message:match("^C|(.*)$")
     if not payload then return end
 
-    local counts = {}
+    local existing = HoppdebaeseDB.guildStats[sender]
+    local counts = existing and existing.completionCounts or {}
     for pair in payload:gmatch("[^,]+") do
         local code, rawCount = pair:match("^([%a]+)=([%da-z]+)$")
         local count = math.min(tonumber(rawCount, 36) or 0, 9999999)
         if CHALLENGE_BY_CODE[code] then counts[CHALLENGE_BY_CODE[code].id] = count end
     end
 
-    local profile = GuildFitWheelDB.guildStats[sender] or {
+    local profile = existing or {
         difficulty = "medium",
         completedChallenges = 0,
         stats = {},
     }
     profile.completionCounts = counts
     profile.updated = time and time() or 0
-    GuildFitWheelDB.guildStats[sender] = profile
+    HoppdebaeseDB.guildStats[sender] = profile
 end
 
 local function CompleteCurrentChallenge()
     local challenge = addon.currentChallenge
-    if not challenge or addon.spinning then return end
-    GuildFitWheelDB.stats[challenge.id] = (GuildFitWheelDB.stats[challenge.id] or 0) + challenge.amount
-    GuildFitWheelDB.completionCounts[challenge.id] = (GuildFitWheelDB.completionCounts[challenge.id] or 0) + 1
-    GuildFitWheelDB.completedChallenges = (GuildFitWheelDB.completedChallenges or 0) + 1
+    if not challenge or addon.rolling then return end
+    HoppdebaeseDB.stats[challenge.id] = (HoppdebaeseDB.stats[challenge.id] or 0) + challenge.amount
+    HoppdebaeseDB.completionCounts[challenge.id] = (HoppdebaeseDB.completionCounts[challenge.id] or 0) + 1
+    HoppdebaeseDB.completedChallenges = (HoppdebaeseDB.completedChallenges or 0) + 1
     if DAILY_GOALS[challenge.id] then
         EnsureDailyState()
         local goal = GetDailyGoal(challenge.id)
-        GuildFitWheelDB.daily.stats[challenge.id] = math.min(
+        HoppdebaeseDB.daily.stats[challenge.id] = math.min(
             goal,
-            (GuildFitWheelDB.daily.stats[challenge.id] or 0) + challenge.amount
+            (HoppdebaeseDB.daily.stats[challenge.id] or 0) + challenge.amount
         )
     end
     BroadcastStats(true)
@@ -446,96 +496,114 @@ end
 
 local function SaveWindowPosition(frame)
     local point, _, relativePoint, x, y = frame:GetPoint(1)
-    GuildFitWheelDB.window.point = point
-    GuildFitWheelDB.window.relativePoint = relativePoint
-    GuildFitWheelDB.window.x = x
-    GuildFitWheelDB.window.y = y
-    GuildFitWheelDB.window.width = frame:GetWidth()
-    GuildFitWheelDB.window.height = frame:GetHeight()
+    HoppdebaeseDB.window.point = point
+    HoppdebaeseDB.window.relativePoint = relativePoint
+    HoppdebaeseDB.window.x = x
+    HoppdebaeseDB.window.y = y
+    HoppdebaeseDB.window.width = frame:GetWidth()
+    HoppdebaeseDB.window.height = frame:GetHeight()
 end
 
-local function SetWheelMarker(activeIndex)
-    for index, marker in ipairs(addon.wheelMarkers or {}) do
-        if index == activeIndex then
-            marker:SetTextColor(1, 0.78, 0.18)
-            marker:SetText("O")
-        else
-            marker:SetTextColor(0.27, 0.72, 0.52)
-            marker:SetText("o")
-        end
+local BOX_ROW_COUNT = 5
+local BOX_CENTER_ROW = 3
+
+local function RefreshBoxRows()
+    for index, row in ipairs(addon.boxRows or {}) do
+        local challenge = addon.boxItems and addon.boxItems[index]
+        row.text:SetText(challenge and challenge.text or "...")
+        row.icon:SetTexture(challenge and challenge.icon or nil)
     end
 end
 
-local function StopSpin()
-    addon.spinning = false
-    addon.spinElapsed = 0
-    addon.shuffleElapsed = 0
-    SetWheelMarker(addon.activeWheelMarker)
-    addon.currentChallenge = RollChallenge(addon.currentTrigger)
-    addon.challengeText:SetText(addon.currentChallenge.text)
-    addon.spinButton:Enable()
+local function FillBoxItems()
+    addon.boxItems = {}
+    for index = 1, BOX_ROW_COUNT do
+        addon.boxItems[index] = RollChallenge(addon.currentTrigger)
+    end
+    RefreshBoxRows()
+end
+
+local function AdvanceBox()
+    table.remove(addon.boxItems, 1)
+    table.insert(addon.boxItems, RollChallenge(addon.currentTrigger))
+    RefreshBoxRows()
+end
+
+local function StopBoxRoll()
+    addon.rolling = false
+    addon.rollElapsed = 0
+    addon.rollStepElapsed = 0
+    addon.currentChallenge = addon.boxItems[BOX_CENTER_ROW]
+    if HoppdebaeseDB.announceGuild and IsInGuild() and type(SendChatMessage) == "function" then
+        SendChatMessage("Hoppdebäse challenge: " .. addon.currentChallenge.text, "GUILD")
+    end
+    addon.debugRollButton:Enable()
     addon.swapButton:Enable()
     addon.completeButton:Enable()
 end
 
-local function StartSpin()
-    if addon.spinning then
-        return
-    end
-    addon.spinning = true
-    addon.spinElapsed = 0
-    addon.shuffleElapsed = 0
-    addon.wheelElapsed = 0
-    addon.activeWheelMarker = 1
-    SetWheelMarker(addon.activeWheelMarker)
-    addon.spinButton:Disable()
+local function StartBoxRoll(delay)
+    if addon.rolling then return end
+    addon.rolling = true
+    addon.rollDelay = delay or 0
+    addon.rollElapsed = 0
+    addon.rollStepElapsed = 0
+    addon.currentChallenge = nil
+    FillBoxItems()
+    addon.debugRollButton:Disable()
     addon.swapButton:Disable()
     addon.completeButton:Disable()
 end
 
-local function CreateWheelVisual(parent)
-    local wheel = CreateFrame("Frame", nil, parent)
-    wheel:SetSize(220, 220)
-    wheel:SetPoint("TOP", 0, -67)
-    addon.wheelMarkers = {}
+local function CreateBoxVisual(parent)
+    local box = CreateFrame("Frame", nil, parent)
+    box:SetSize(400, 226)
+    box:SetPoint("TOP", 0, -68)
+    addon.boxRows = {}
 
-    for index = 1, 16 do
-        local angle = math.rad(90 - ((index - 1) * 22.5))
-        local marker = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        marker:SetPoint("CENTER", wheel, "CENTER", math.cos(angle) * 92, math.sin(angle) * 92)
-        marker:SetText("o")
-        addon.wheelMarkers[index] = marker
+    for index = 1, BOX_ROW_COUNT do
+        local row = CreateFrame("Frame", nil, box)
+        row:SetSize(390, 40)
+        row:SetPoint("TOP", 0, -((index - 1) * 44))
+
+        local background = row:CreateTexture(nil, "BACKGROUND")
+        background:SetAllPoints()
+        background:SetTexture("Interface\\Buttons\\WHITE8X8")
+        if index == BOX_CENTER_ROW then
+            background:SetVertexColor(0.13, 0.42, 0.30, 0.95)
+        else
+            background:SetVertexColor(0.07, 0.09, 0.10, 0.75)
+        end
+
+        local icon = row:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(32, 32)
+        icon:SetPoint("LEFT", 6, 0)
+        row.icon = icon
+
+        local text = row:CreateFontString(nil, "OVERLAY", index == BOX_CENTER_ROW and "GameFontNormalLarge" or "GameFontHighlight")
+        text:SetPoint("LEFT", icon, "RIGHT", 10, 0)
+        text:SetPoint("RIGHT", -8, 0)
+        text:SetJustifyH("LEFT")
+        if index == BOX_CENTER_ROW then text:SetTextColor(1, 0.82, 0.28) end
+        row.text = text
+        addon.boxRows[index] = row
     end
 
-    local pointer = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    pointer:SetPoint("TOP", wheel, "TOP", 0, 8)
-    pointer:SetText("v")
-    pointer:SetTextColor(1, 0.78, 0.18)
-
-    local hub = wheel:CreateFontString(nil, "BACKGROUND", "GameFontNormalHuge")
-    hub:SetPoint("CENTER")
-    hub:SetText("+")
-    hub:SetTextColor(0.16, 0.30, 0.25)
-
-    local challenge = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-    challenge:SetPoint("CENTER")
-    challenge:SetWidth(150)
-    challenge:SetHeight(100)
-    challenge:SetJustifyH("CENTER")
-    challenge:SetJustifyV("MIDDLE")
-    addon.challengeText = challenge
-    SetWheelMarker(1)
+    local selected = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    selected:SetPoint("RIGHT", box, "LEFT", -7, 0)
+    selected:SetText(">")
+    selected:SetTextColor(1, 0.82, 0.28)
 end
 
 local function CreateMainWindow()
-    local frame = CreateFrame("Frame", "GuildFitWheelFrame", UIParent, BACKDROP_TEMPLATE)
-    frame:SetSize(math.max(GuildFitWheelDB.window.width, 460), math.max(GuildFitWheelDB.window.height, 400))
+    local frame = CreateFrame("Frame", "HoppdebaeseBoxFrame", UIParent, BACKDROP_TEMPLATE)
+    frame:SetSize(math.max(HoppdebaeseDB.window.width, 460), math.max(HoppdebaeseDB.window.height, 400))
     frame:SetPoint(
-        GuildFitWheelDB.window.point,
+        HoppdebaeseDB.window.point,
         UIParent,
-        GuildFitWheelDB.window.relativePoint,
-        GuildFitWheelDB.window.x,
-        GuildFitWheelDB.window.y
+        HoppdebaeseDB.window.relativePoint,
+        HoppdebaeseDB.window.x,
+        HoppdebaeseDB.window.y
     )
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -554,9 +622,9 @@ local function CreateMainWindow()
         SaveWindowPosition(self)
     end)
     frame:SetScript("OnSizeChanged", function(self)
-        if GuildFitWheelDB then
-            GuildFitWheelDB.window.width = self:GetWidth()
-            GuildFitWheelDB.window.height = self:GetHeight()
+        if HoppdebaeseDB then
+            HoppdebaeseDB.window.width = self:GetWidth()
+            HoppdebaeseDB.window.height = self:GetHeight()
         end
     end)
     AddBackdrop(frame)
@@ -570,22 +638,21 @@ local function CreateMainWindow()
     subtitle:SetPoint("TOP", title, "BOTTOM", 0, -7)
     subtitle:SetText("A brief break for your next bit of progress")
 
-    CreateWheelVisual(frame)
+    CreateBoxVisual(frame)
 
-    local spin = CreateButton(frame, "Spin Wheel", 112)
-    spin:SetPoint("BOTTOMLEFT", 20, 24)
-    spin:SetScript("OnClick", StartSpin)
-    addon.spinButton = spin
+    local debugRoll = CreateButton(frame, "Debug: Roll Box", 130)
+    debugRoll:SetPoint("BOTTOMLEFT", 20, 24)
+    debugRoll:SetScript("OnClick", function() StartBoxRoll(0) end)
+    addon.debugRollButton = debugRoll
 
     local swap = CreateButton(frame, "Rest & Swap", 116)
-    swap:SetPoint("LEFT", spin, "RIGHT", 8, 0)
+    swap:SetPoint("LEFT", debugRoll, "RIGHT", 8, 0)
     swap:SetScript("OnClick", function()
         local previousID = addon.currentChallenge and addon.currentChallenge.id
         if previousID and DAILY_GOALS[previousID] then
             addon.sessionDisabled[previousID] = true
         end
-        addon.currentChallenge = RollChallenge(addon.currentTrigger, previousID)
-        addon.challengeText:SetText(addon.currentChallenge.text)
+        StartBoxRoll(0.15)
     end)
     addon.swapButton = swap
 
@@ -621,22 +688,23 @@ local function CreateMainWindow()
     end)
 
     frame:SetScript("OnUpdate", function(_, elapsed)
-        if not addon.spinning then return end
-        addon.spinElapsed = addon.spinElapsed + elapsed
-        addon.shuffleElapsed = addon.shuffleElapsed + elapsed
-        addon.wheelElapsed = addon.wheelElapsed + elapsed
-        local progress = math.min(addon.spinElapsed / 2, 1)
-        local wheelInterval = 0.035 + (progress * progress * 0.13)
-        if addon.wheelElapsed >= wheelInterval then
-            addon.wheelElapsed = 0
-            addon.activeWheelMarker = (addon.activeWheelMarker % #addon.wheelMarkers) + 1
-            SetWheelMarker(addon.activeWheelMarker)
+        if not addon.rolling then return end
+        if addon.rollDelay > 0 then
+            addon.rollDelay = addon.rollDelay - elapsed
+            if addon.rollDelay > 0 then return end
+            elapsed = -addon.rollDelay
+            addon.rollDelay = 0
         end
-        if addon.shuffleElapsed >= 0.09 then
-            addon.shuffleElapsed = 0
-            addon.challengeText:SetText(RollChallenge(addon.currentTrigger).text)
+
+        addon.rollElapsed = addon.rollElapsed + elapsed
+        addon.rollStepElapsed = addon.rollStepElapsed + elapsed
+        local progress = math.min(addon.rollElapsed / 2, 1)
+        local stepInterval = 0.045 + (progress * progress * 0.16)
+        while addon.rollStepElapsed >= stepInterval do
+            addon.rollStepElapsed = addon.rollStepElapsed - stepInterval
+            AdvanceBox()
         end
-        if addon.spinElapsed >= 2 then StopSpin() end
+        if addon.rollElapsed >= 2 then StopBoxRoll() end
     end)
     frame:Hide()
     addon.mainFrame = frame
@@ -664,15 +732,15 @@ local function BuildLeaderboardText()
     local participants = {
         {
             name = playerName,
-            difficulty = GuildFitWheelDB.difficulty,
-            completedChallenges = GuildFitWheelDB.completedChallenges or 0,
-            stats = GuildFitWheelDB.stats,
-            completionCounts = GuildFitWheelDB.completionCounts,
+            difficulty = HoppdebaeseDB.difficulty,
+            completedChallenges = HoppdebaeseDB.completedChallenges or 0,
+            stats = HoppdebaeseDB.stats,
+            completionCounts = HoppdebaeseDB.completionCounts,
             isPlayer = true,
         },
     }
 
-    for name, profile in pairs(GuildFitWheelDB.guildStats) do
+    for name, profile in pairs(HoppdebaeseDB.guildStats) do
         if name ~= playerName and type(profile) == "table" and type(profile.stats) == "table" then
             table.insert(participants, {
                 name = name,
@@ -851,7 +919,7 @@ local function CreateProgressWindow()
 
     function addon:RefreshProgress()
         EnsureDailyState()
-        local difficulty = DIFFICULTIES[GuildFitWheelDB.difficulty] or DIFFICULTIES.medium
+        local difficulty = DIFFICULTIES[HoppdebaeseDB.difficulty] or DIFFICULTIES.medium
         self.progressSubtitle:SetText(string.format(
             "%s difficulty  |  Daily goals reset each calendar day",
             difficulty.label
@@ -859,8 +927,8 @@ local function CreateProgressWindow()
 
         for _, challenge in ipairs(ALL_CHALLENGES) do
             local row = self.progressRows[challenge.id]
-            local allTimeAmount = tonumber(GuildFitWheelDB.stats[challenge.id]) or 0
-            local completions = tonumber(GuildFitWheelDB.completionCounts[challenge.id]) or 0
+            local allTimeAmount = tonumber(HoppdebaeseDB.stats[challenge.id]) or 0
+            local completions = tonumber(HoppdebaeseDB.completionCounts[challenge.id]) or 0
             row.total:SetText(string.format(
                 "All time: %d %s  |  %d challenges",
                 allTimeAmount,
@@ -902,8 +970,8 @@ local function CreateProgressWindow()
 end
 
 local function CreateSettingsWindow()
-    local frame = CreateFrame("Frame", "GuildFitWheelSettings", UIParent, BACKDROP_TEMPLATE)
-    frame:SetSize(420, 470)
+    local frame = CreateFrame("Frame", "HoppdebaeseSettings", UIParent, BACKDROP_TEMPLATE)
+    frame:SetSize(420, 540)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -926,7 +994,7 @@ local function CreateSettingsWindow()
     addon.difficultyButtons = {}
     local function RefreshDifficultyButtons()
         for key, button in pairs(addon.difficultyButtons) do
-            if key == GuildFitWheelDB.difficulty then button:Disable() else button:Enable() end
+            if key == HoppdebaeseDB.difficulty then button:Disable() else button:Enable() end
         end
     end
     for index, key in ipairs({ "easy", "medium", "hard", "extreme" }) do
@@ -934,7 +1002,7 @@ local function CreateSettingsWindow()
         local button = CreateButton(frame, DIFFICULTIES[key].label, 84)
         button:SetPoint("TOPLEFT", 24 + ((index - 1) * 92), -78)
         button:SetScript("OnClick", function()
-            GuildFitWheelDB.difficulty = difficultyKey
+            HoppdebaeseDB.difficulty = difficultyKey
             RefreshDifficultyButtons()
             BroadcastStats(true)
             if addon.RefreshProgress then addon:RefreshProgress() end
@@ -952,30 +1020,39 @@ local function CreateSettingsWindow()
         { key = "death", text = "Player death (harder)" },
         { key = "flight", text = "Flight path starts (easier)" },
         { key = "dungeon", text = "Dungeon completion" },
+        { key = "quests", text = "Every 10 quests completed" },
     }
     for index, info in ipairs(triggers) do
         local triggerKey = info.key
         CreateCheckButton(frame, info.text, 22, -136 - ((index - 1) * 30),
-            function() return GuildFitWheelDB.triggers[triggerKey] end,
-            function(value) GuildFitWheelDB.triggers[triggerKey] = value end)
+            function() return HoppdebaeseDB.triggers[triggerKey] end,
+            function(value) HoppdebaeseDB.triggers[triggerKey] = value end)
     end
 
+    local sharingTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    sharingTitle:SetPoint("TOPLEFT", 24, -294)
+    sharingTitle:SetText("Sharing")
+
+    CreateCheckButton(frame, "Announce rolled challenge in guild chat", 22, -308,
+        function() return HoppdebaeseDB.announceGuild end,
+        function(value) HoppdebaeseDB.announceGuild = value end)
+
     local toolsTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    toolsTitle:SetPoint("TOPLEFT", 24, -274)
+    toolsTitle:SetPoint("TOPLEFT", 24, -350)
     toolsTitle:SetText("Equipment available at home")
 
     for index, info in ipairs(TOOL_LABELS) do
         local toolKey = info.key
-        CreateCheckButton(frame, info.text, 22, -288 - ((index - 1) * 30),
-            function() return GuildFitWheelDB.tools[toolKey] end,
-            function(value) GuildFitWheelDB.tools[toolKey] = value end)
+        CreateCheckButton(frame, info.text, 22, -364 - ((index - 1) * 30),
+            function() return HoppdebaeseDB.tools[toolKey] end,
+            function(value) HoppdebaeseDB.tools[toolKey] = value end)
     end
 
     local close = CreateButton(frame, "Done", 100)
     close:SetPoint("BOTTOMRIGHT", -20, 18)
     close:SetScript("OnClick", function() frame:Hide() end)
 
-    local test = CreateButton(frame, "Test Wheel", 110)
+    local test = CreateButton(frame, "Test Box", 110)
     test:SetPoint("BOTTOMLEFT", 20, 18)
     test:SetScript("OnClick", function()
         frame:Hide()
@@ -993,7 +1070,7 @@ function addon:ShowChallenge(triggerKey, level)
     self.titleText:SetText(info.title)
     self.mainFrame:Show()
     self.mainFrame:Raise()
-    StartSpin()
+    StartBoxRoll(0.45)
 end
 
 local function RegisterOptionalEvent(eventName)
@@ -1005,9 +1082,9 @@ addon:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddon = ...
         if loadedAddon ~= ADDON_NAME then return end
-        GuildFitWheelDB = GuildFitWheelDB or {}
-        CopyDefaults(DEFAULTS, GuildFitWheelDB)
-        if not DIFFICULTIES[GuildFitWheelDB.difficulty] then GuildFitWheelDB.difficulty = "medium" end
+        HoppdebaeseDB = HoppdebaeseDB or {}
+        CopyDefaults(DEFAULTS, HoppdebaeseDB)
+        if not DIFFICULTIES[HoppdebaeseDB.difficulty] then HoppdebaeseDB.difficulty = "medium" end
         EnsureGuildIdentity()
         if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
             C_ChatInfo.RegisterAddonMessagePrefix(MESSAGE_PREFIX)
@@ -1034,7 +1111,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 self.leaderboardFrame:Show()
             elseif command == "progress" or command == "overview" then
                 self.progressFrame:Show()
-            elseif command == "test" or command == "spin" then
+            elseif command == "test" or command == "box" then
                 self:ShowChallenge("manual")
             else
                 print("|cff61f2adHoppdebäse|r: /hopp settings, /hopp progress, /hopp leaderboard, /hopp test")
@@ -1043,7 +1120,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
         return
     end
 
-    if not GuildFitWheelDB then return end
+    if not HoppdebaeseDB then return end
     if event == "CHAT_MSG_ADDON" then
         local prefix, message, channel, sender = ...
         if prefix ~= MESSAGE_PREFIX or channel ~= "GUILD" then return end
@@ -1060,15 +1137,20 @@ addon:SetScript("OnEvent", function(self, event, ...)
         RequestGuildStats(false)
     elseif event == "PLAYER_GUILD_UPDATE" then
         RequestGuildStats(false)
-    elseif event == "PLAYER_LEVEL_UP" and GuildFitWheelDB.triggers.levelUp then
+    elseif event == "QUEST_TURNED_IN" then
+        HoppdebaeseDB.questsCompleted = (HoppdebaeseDB.questsCompleted or 0) + 1
+        if HoppdebaeseDB.triggers.quests and HoppdebaeseDB.questsCompleted % 10 == 0 then
+            self:ShowChallenge("quest")
+        end
+    elseif event == "PLAYER_LEVEL_UP" and HoppdebaeseDB.triggers.levelUp then
         self:ShowChallenge("levelUp", ...)
-    elseif event == "PLAYER_DEAD" and GuildFitWheelDB.triggers.death then
+    elseif event == "PLAYER_DEAD" and HoppdebaeseDB.triggers.death then
         self:ShowChallenge("death")
     elseif (event == "LFG_COMPLETION_REWARD" or event == "DUNGEON_COMPLETED")
-        and GuildFitWheelDB.triggers.dungeon then
+        and HoppdebaeseDB.triggers.dungeon then
         self:ShowChallenge("dungeon")
     elseif (event == "CHALLENGE_MODE_COMPLETED" or event == "SCENARIO_COMPLETED")
-        and GuildFitWheelDB.triggers.dungeon then
+        and HoppdebaeseDB.triggers.dungeon then
         self:ShowChallenge("dungeon")
     end
 end)
@@ -1077,6 +1159,7 @@ addon:RegisterEvent("ADDON_LOADED")
 addon:RegisterEvent("CHAT_MSG_ADDON")
 addon:RegisterEvent("PLAYER_LOGIN")
 addon:RegisterEvent("PLAYER_GUILD_UPDATE")
+addon:RegisterEvent("QUEST_TURNED_IN")
 addon:RegisterEvent("PLAYER_LEVEL_UP")
 addon:RegisterEvent("PLAYER_DEAD")
 
@@ -1084,7 +1167,7 @@ addon:RegisterEvent("PLAYER_DEAD")
 -- action after it runs is secure and precisely identifies a selected flight path.
 if type(hooksecurefunc) == "function" and type(TakeTaxiNode) == "function" then
     hooksecurefunc("TakeTaxiNode", function()
-        if GuildFitWheelDB and GuildFitWheelDB.triggers.flight then
+        if HoppdebaeseDB and HoppdebaeseDB.triggers.flight then
             addon:ShowChallenge("flight")
         end
     end)
