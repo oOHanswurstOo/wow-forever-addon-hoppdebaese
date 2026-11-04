@@ -155,7 +155,8 @@ local function startSession(dateKey, seed, difficulty)
         addon = addon,
         frames = createdFrames,
         named = namedFrames,
-        swap = findButton(createdFrames, "Rest & Swap"),
+        swap = findButton(createdFrames, "Replace Exercise (Session)"),
+        help = findButton(createdFrames, "?"),
         minimize = findButton(createdFrames, "Minimize"),
         records = {},
     }
@@ -181,9 +182,15 @@ local function runPrompt(session, eventName, label, level, shouldSwap)
         swappedFrom = first.text
         assert(#HoppdebaeseDB.todo == 1, "Settled challenge was not queued")
         session.swap.scripts.OnClick(session.swap)
-        assert(session.addon.sessionDisabled[first.id], "Rest & Swap did not disable " .. first.id)
+        assert(session.addon.sessionDisabled[first.id], "Session replacement did not disable " .. first.id)
+        assert(session.named.HoppdebaeseRested, "Rested Exercises window was not created")
+        session.named.HoppdebaeseRested:Show()
+        local restore = findButton(session.frames, "Restore")
+        assert(restore.exerciseID == first.id, "Rested Exercises listed the wrong exercise")
         for _ = 1, 90 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
-        assert(#HoppdebaeseDB.todo == 1, "Rest & Swap did not replace its Todo entry")
+        assert(#HoppdebaeseDB.todo == 1, "Session replacement did not replace its Todo entry")
+        restore.scripts.OnClick(restore)
+        assert(not session.addon.sessionDisabled[first.id], "Restore did not re-enable " .. first.id)
     end
 
     local selected = assert(session.addon.currentChallenge, "No challenge selected after swap")
@@ -391,6 +398,9 @@ for _, difficulty in ipairs({ "easy", "medium", "hard", "extreme" }) do runDiffi
 savedDB = nil
 simulatedLevel = 20
 local distributionSession = startSession("2026-11-07", 404, "medium")
+distributionSession.help.scripts.OnClick(distributionSession.help)
+assert(distributionSession.named.HoppdebaeseHelp:IsShown(), "Help button did not open the reference window")
+distributionSession.named.HoppdebaeseHelp:Hide()
 local distributionTotal = 2000
 local stapleHits = 0
 local stapleCounts = { squats = 0, situps = 0, pushups = 0 }
@@ -426,6 +436,30 @@ for _ = 1, 8 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 assert(distributionSession.addon.boxItems[5] == initialBottom, "Box moved before the 0.45 second delay")
 for _ = 1, 92 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 assert(distributionSession.addon.currentChallenge == distributionSession.addon.boxItems[3])
+
+distributionSession.addon:ShowChallenge("manual")
+for _ = 1, 9 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+local earlyAdvances = 0
+local previousBottom = distributionSession.addon.boxItems[5]
+for _ = 1, 20 do
+    mainFrame.scripts.OnUpdate(mainFrame, 0.05)
+    if distributionSession.addon.boxItems[5] ~= previousBottom then
+        earlyAdvances = earlyAdvances + 1
+        previousBottom = distributionSession.addon.boxItems[5]
+    end
+end
+for _ = 1, 40 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+local lateAdvances = 0
+previousBottom = distributionSession.addon.boxItems[5]
+for _ = 1, 20 do
+    mainFrame.scripts.OnUpdate(mainFrame, 0.05)
+    if distributionSession.addon.boxItems[5] ~= previousBottom then
+        lateAdvances = lateAdvances + 1
+        previousBottom = distributionSession.addon.boxItems[5]
+    end
+end
+assert(earlyAdvances > lateAdvances * 3, "Roll ending is not substantially slower than its beginning")
+HoppdebaeseDB.todo = {}
 
 -- The box follows the resized main frame, and low/high amounts retain their
 -- green/red range metadata for the row renderer.

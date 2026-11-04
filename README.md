@@ -18,16 +18,21 @@ filling its progress bar, that exercise rests until the next day.
 
 - `/hopp settings` opens difficulty, trigger, and equipment settings.
 - `/hopp todo` opens saved challenges waiting to be completed.
+- `/hopp rested` shows exercises excluded for the current login session.
+- `/hopp help` opens details for controls, settings, and every exercise.
 - `/hopp progress` shows daily goal bars and all-time totals for every challenge.
 - `/hopp leaderboard` shows completed challenges and per-workout guild totals.
 - `/hopp test` opens and animates a test challenge box.
 
-The responsive challenge box rolls quickly at first, slows over four seconds,
+The responsive challenge box rolls quickly at first, slows substantially near
+the end of its four-second animation,
 and colors low amounts green through high amounts red. Every settled challenge
 is added to the persistent Todo window. Complete challenges there to credit
-daily and all-time progress. **Rest & Swap** replaces the latest Todo entry and
-disables that physical exercise for the current login session. **Minimize** hides
-the roll window while leaving its Todo entry available.
+daily and all-time progress. **Replace Exercise (Session)** replaces the latest
+Todo entry and excludes that physical exercise until relogging. Open **Rested**
+to view excluded exercises and restore any of them immediately. **Minimize**
+hides the roll window while leaving its Todo entry available. The **?** button
+opens the complete in-addon reference.
 
 When all available exercises are complete or resting, future boxes offer only
 standing/stretching, hydration, and eye-rest prompts.

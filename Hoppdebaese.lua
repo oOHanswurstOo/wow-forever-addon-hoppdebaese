@@ -105,6 +105,39 @@ local EASY_CHALLENGES = {
     { id = "shower", code = "sh", name = "Showers", text = "Take a shower", amount = 1, unit = "times", icon = ICONS.water },
 }
 
+local CHALLENGE_DESCRIPTIONS = {
+    squats = "Lower-body squat repetitions for legs and hips.",
+    situps = "Floor sit-ups for the abdominal muscles.",
+    wallSit = "Hold a seated position with your back against a wall.",
+    pushups = "Upper-body pushing repetitions from the floor or an elevated surface.",
+    jumpingJacks = "Full-body jumping jacks to raise your heart rate.",
+    plank = "Hold a straight forearm or high-plank position.",
+    reverseLunges = "Step backward into alternating lunges; the amount is total repetitions.",
+    calfRaises = "Rise onto your toes and lower with control.",
+    gluteBridges = "Lift your hips from the floor while keeping your upper back planted.",
+    birdDogs = "From hands and knees, extend opposite arm and leg; count both sides.",
+    mountainClimbers = "Alternate driving your knees forward from a plank position.",
+    highKnees = "Run in place while lifting the knees high; count total repetitions.",
+    deadBugs = "Lower opposite arm and leg from a face-up tabletop position.",
+    sidePlank = "Hold a side-plank position; split the time between both sides.",
+    benchPress = "Press weights while supported by a workout bench.",
+    pullups = "Pull yourself up from a pull-up bar with controlled form.",
+    dumbbellCurls = "Curl dumbbells toward the shoulders; count total repetitions.",
+    dumbbellRows = "Pull dumbbells toward the torso with a stable back.",
+    seatedShoulderPress = "Press dumbbells overhead while seated on a bench.",
+    lateralRaises = "Raise dumbbells out to the sides with soft elbows.",
+    overheadTriceps = "Lower and extend a dumbbell behind the head.",
+    hammerCurls = "Curl dumbbells with palms facing inward.",
+    treadmillWalk = "Walk on a treadmill for the displayed number of minutes.",
+    treadmillRun = "Run on a treadmill for the displayed number of minutes.",
+    water = "Drink one glass of water.",
+    stretch = "Stand up and gently stretch for the displayed duration.",
+    shoulders = "Perform slow shoulder rolls to release upper-body tension.",
+    breathing = "Pause for slow, controlled deep breaths.",
+    eyeRest = "Look away from the screen at a distant object.",
+    shower = "Take a short refresh break and shower.",
+}
+
 local TRIGGER_INFO = {
     levelUp = { title = "Level Up Challenge", multiplier = 1 },
     death = { title = "Defeat Recovery Challenge", multiplier = 1.35 },
@@ -573,6 +606,19 @@ local function CreateButton(parent, text, width)
     return button
 end
 
+local function AttachTooltip(frame, title, description)
+    frame:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(title, 1, 0.82, 0.28)
+        GameTooltip:AddLine(description, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    frame:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+end
+
 local function SaveWindowPosition(frame)
     local point, _, relativePoint, x, y = frame:GetPoint(1)
     HoppdebaeseDB.window.point = point
@@ -766,7 +812,7 @@ local function CreateMainWindow()
     debugRoll:SetScript("OnClick", function() StartBoxRoll(0) end)
     addon.debugRollButton = debugRoll
 
-    local swap = CreateButton(frame, "Rest & Swap", 116)
+    local swap = CreateButton(frame, "Replace Exercise (Session)", 174)
     swap:SetPoint("LEFT", debugRoll, "RIGHT", 8, 0)
     swap:SetScript("OnClick", function()
         local previousID = addon.currentChallenge and addon.currentChallenge.id
@@ -774,9 +820,15 @@ local function CreateMainWindow()
         addon.currentTodoID = nil
         if previousID and DAILY_GOALS[previousID] then
             addon.sessionDisabled[previousID] = true
+            if addon.RefreshRested then addon:RefreshRested() end
         end
         StartBoxRoll(0.15)
     end)
+    AttachTooltip(
+        swap,
+        "Replace Exercise for This Session",
+        "Replaces the current challenge and prevents that exercise from rolling again until you relog. Restore it from Rested Exercises."
+    )
     addon.swapButton = swap
 
     local minimize = CreateButton(frame, "Minimize", 100)
@@ -797,9 +849,19 @@ local function CreateMainWindow()
     todo:SetScript("OnClick", function() addon.todoFrame:Show() end)
     addon.todoButton = todo
 
+    local rested = CreateButton(frame, "Rested", 82)
+    rested:SetPoint("LEFT", todo, "RIGHT", 8, 0)
+    rested:SetScript("OnClick", function() addon.restedFrame:Show() end)
+    addon.restedButton = rested
+
     local progress = CreateButton(frame, "Progress", 80)
     progress:SetPoint("TOPLEFT", 14, -44)
     progress:SetScript("OnClick", function() addon.progressFrame:Show() end)
+
+    local help = CreateButton(frame, "?", 28)
+    help:SetPoint("RIGHT", settings, "LEFT", -6, 0)
+    help:SetScript("OnClick", function() addon.helpFrame:Show() end)
+    AttachTooltip(help, "Hoppdebäse Help", "Open button, exercise, and settings details.")
 
     local resize = CreateFrame("Button", nil, frame)
     resize:SetSize(20, 20)
@@ -827,7 +889,7 @@ local function CreateMainWindow()
         addon.rollElapsed = addon.rollElapsed + elapsed
         addon.rollStepElapsed = addon.rollStepElapsed + elapsed
         local progress = math.min(addon.rollElapsed / BOX_ROLL_DURATION, 1)
-        local stepInterval = 0.035 + (progress * progress * progress * 0.30)
+        local stepInterval = 0.030 + (progress * progress * progress * progress * 0.62)
         while addon.rollStepElapsed >= stepInterval do
             addon.rollStepElapsed = addon.rollStepElapsed - stepInterval
             AdvanceBox()
@@ -1063,6 +1125,209 @@ local function CreateTodoWindow()
     frame:SetScript("OnShow", function() addon:RefreshTodo() end)
     frame:Hide()
     addon.todoFrame = frame
+end
+
+local function CreateRestedWindow()
+    local frame = CreateFrame("Frame", "HoppdebaeseRested", UIParent, BACKDROP_TEMPLATE)
+    frame:SetSize(520, 430)
+    frame:SetPoint("CENTER", 10, 20)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    AddBackdrop(frame)
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 22, -20)
+    title:SetText("Rested Exercises")
+    title:SetTextColor(0.38, 0.95, 0.68)
+
+    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
+    addon.restedSubtitle = subtitle
+
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 22, -62)
+    scroll:SetPoint("BOTTOMRIGHT", -42, 58)
+
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(445, 1)
+    scroll:SetScrollChild(content)
+    addon.restedContent = content
+    addon.restedRows = {}
+
+    function addon:RefreshRested()
+        if not self.restedRows then return end
+        for _, row in ipairs(self.restedRows) do row:Hide() end
+
+        local rested = {}
+        for _, exercise in ipairs(EXERCISES) do
+            if self.sessionDisabled[exercise.id] then table.insert(rested, exercise) end
+        end
+
+        for index, exercise in ipairs(rested) do
+            local row = self.restedRows[index]
+            if not row then
+                row = CreateFrame("Frame", nil, self.restedContent)
+                row:SetSize(440, 50)
+
+                local background = row:CreateTexture(nil, "BACKGROUND")
+                background:SetAllPoints()
+                background:SetTexture("Interface\\Buttons\\WHITE8X8")
+                background:SetVertexColor(0.07, 0.11, 0.12, 0.85)
+
+                row.icon = row:CreateTexture(nil, "ARTWORK")
+                row.icon:SetSize(38, 38)
+                row.icon:SetPoint("LEFT", 6, 0)
+
+                row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                row.text:SetPoint("LEFT", row.icon, "RIGHT", 9, 0)
+                row.text:SetPoint("RIGHT", -102, 0)
+                row.text:SetJustifyH("LEFT")
+
+                row.restore = CreateButton(row, "Restore", 84)
+                row.restore:SetPoint("RIGHT", -7, 0)
+                row.restore:SetScript("OnClick", function(button)
+                    addon.sessionDisabled[button.exerciseID] = nil
+                    addon:RefreshRested()
+                    if addon.RefreshProgress then addon:RefreshProgress() end
+                end)
+                self.restedRows[index] = row
+            end
+
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 2, -((index - 1) * 54))
+            row.icon:SetTexture(exercise.icon)
+            row.text:SetText(exercise.name)
+            row.restore.exerciseID = exercise.id
+            row:Show()
+        end
+
+        local count = #rested
+        self.restedContent:SetHeight(math.max(1, count * 54))
+        if count == 0 then
+            self.restedSubtitle:SetText("No exercises are excluded for this login session.")
+        else
+            self.restedSubtitle:SetText(count == 1 and "1 exercise excluded until relogging" or (count .. " exercises excluded until relogging"))
+        end
+        if self.restedButton then self.restedButton:SetText("Rested (" .. count .. ")") end
+    end
+
+    local close = CreateButton(frame, "Close", 100)
+    close:SetPoint("BOTTOMRIGHT", -22, 20)
+    close:SetScript("OnClick", function() frame:Hide() end)
+
+    frame:SetScript("OnShow", function() addon:RefreshRested() end)
+    frame:Hide()
+    addon.restedFrame = frame
+end
+
+local function BuildHelpText()
+    local lines = {
+        "|cffffc74dCHALLENGE BOX BUTTONS|r",
+        "|cffffffffDebug: Roll Box|r - Starts a manual test roll.",
+        "|cffffffffReplace Exercise (Session)|r - Replaces the current Todo challenge and excludes that physical exercise until you relog. Use Rested to undo it.",
+        "|cffffffffMinimize|r - Hides the challenge box without removing its Todo entry.",
+        "|cffffffffTodo|r - Lists rolled challenges. Complete credits the amount to daily and all-time progress.",
+        "|cffffffffRested|r - Lists exercises excluded for this login session. Restore makes one available again.",
+        "|cffffffffProgress|r - Shows daily caps, session-rested status, and all-time totals.",
+        "|cffffffffLeaderboard|r - Requests and displays participating guild members' totals.",
+        "|cffffffffSettings|r - Opens difficulty, trigger, sharing, and equipment options.",
+        "|cffffffff?|r - Opens this reference.",
+        "|cffffffffRefresh Guild|r - Requests current leaderboard data from online guild members using the addon.",
+        "|cffffffffComplete|r - Finishes a Todo challenge, credits its progress, and removes it from Todo.",
+        "|cffffffffRestore|r - Removes an exercise from the session-rested list so it can roll again.",
+        "|cffffffffClose / Done|r - Closes the current secondary window without changing pending challenges.",
+        " ",
+        "|cffffc74dSETTINGS|r",
+        "|cffffffffDifficulty|r - Easy uses 0.7x amounts, Medium 1x, Hard 1.5x, and Extreme 3x. Daily goals scale separately; Extreme is twice Hard.",
+        "|cffffffffPlayer level-up|r - Rolls when your character gains a level.",
+        "|cffffffffPlayer death|r - Rolls after death with a 1.35x event multiplier.",
+        "|cffffffffFlight path starts|r - Rolls when selecting a taxi, using a lighter 0.75x multiplier.",
+        "|cffffffffDungeon completion|r - Rolls for supported dungeon-completion events with a 1.2x multiplier.",
+        "|cffffffffEvery 10 quests|r - Counts quest turn-ins and rolls on each tenth completion.",
+        "|cffffffffGuild announcement|r - Posts the selected challenge to guild chat. Addon leaderboard sync remains separate.",
+        "|cffffffffWorkout bench|r - Enables bench presses and helps unlock seated shoulder presses.",
+        "|cffffffffPull-up bar|r - Enables pull-ups.",
+        "|cffffffffDumbbells|r - Enables curls, rows, raises, triceps extensions, and dumbbell presses.",
+        "|cffffffffTreadmill|r - Enables timed treadmill walks and runs.",
+        "|cffffffffTest Box|r - Closes Settings and starts a manual roll.",
+        " ",
+        "|cffffc74dEXERCISES AND BREAKS|r",
+    }
+
+    local toolNames = {
+        bench = "a workout bench",
+        pullupBar = "a pull-up bar",
+        dumbbells = "dumbbells",
+        treadmill = "a treadmill",
+    }
+
+    for _, challenge in ipairs(ALL_CHALLENGES) do
+        local equipment = ""
+        if challenge.tool then
+            equipment = " Requires " .. (toolNames[challenge.tool] or challenge.tool) .. "."
+        elseif challenge.tools then
+            local names = {}
+            for _, tool in ipairs(challenge.tools) do
+                table.insert(names, toolNames[tool] or tool)
+            end
+            equipment = " Requires " .. table.concat(names, " and ") .. "."
+        end
+        table.insert(lines, string.format(
+            "|cffffffff%s|r - %s%s",
+            challenge.name,
+            CHALLENGE_DESCRIPTIONS[challenge.id] or "Follow the displayed amount with controlled form.",
+            equipment
+        ))
+    end
+
+    return table.concat(lines, "\n")
+end
+
+local function CreateHelpWindow()
+    local frame = CreateFrame("Frame", "HoppdebaeseHelp", UIParent, BACKDROP_TEMPLATE)
+    frame:SetSize(720, 600)
+    frame:SetPoint("CENTER", -20, 10)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    AddBackdrop(frame)
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 22, -20)
+    title:SetText("Hoppdebäse Help")
+    title:SetTextColor(0.38, 0.95, 0.68)
+
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 22, -54)
+    scroll:SetPoint("BOTTOMRIGHT", -42, 58)
+
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(645, 1)
+    scroll:SetScrollChild(content)
+
+    local text = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    text:SetPoint("TOPLEFT", 4, -4)
+    text:SetWidth(625)
+    text:SetJustifyH("LEFT")
+    text:SetJustifyV("TOP")
+    text:SetText(BuildHelpText())
+    content:SetHeight(math.max(1, text:GetStringHeight() + 16))
+
+    local close = CreateButton(frame, "Close", 100)
+    close:SetPoint("BOTTOMRIGHT", -22, 20)
+    close:SetScript("OnClick", function() frame:Hide() end)
+
+    frame:Hide()
+    addon.helpFrame = frame
 end
 
 local function CreateProgressWindow()
@@ -1307,8 +1572,11 @@ addon:SetScript("OnEvent", function(self, event, ...)
         CreateLeaderboardWindow()
         CreateProgressWindow()
         CreateTodoWindow()
+        CreateRestedWindow()
+        CreateHelpWindow()
         CreateMainWindow()
         self:RefreshTodo()
+        self:RefreshRested()
         RegisterOptionalEvent("LFG_COMPLETION_REWARD")
         RegisterOptionalEvent("DUNGEON_COMPLETED")
         RegisterOptionalEvent("CHALLENGE_MODE_COMPLETED")
@@ -1327,10 +1595,14 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 self.progressFrame:Show()
             elseif command == "todo" or command == "tasks" then
                 self.todoFrame:Show()
+            elseif command == "rested" or command == "excluded" then
+                self.restedFrame:Show()
+            elseif command == "help" or command == "?" then
+                self.helpFrame:Show()
             elseif command == "test" or command == "box" then
                 self:ShowChallenge("manual")
             else
-                print("|cff61f2adHoppdebäse|r: /hopp settings, /hopp todo, /hopp progress, /hopp leaderboard, /hopp test")
+                print("|cff61f2adHoppdebäse|r: /hopp settings, /hopp todo, /hopp rested, /hopp help, /hopp progress, /hopp leaderboard, /hopp test")
             end
         end
         return
