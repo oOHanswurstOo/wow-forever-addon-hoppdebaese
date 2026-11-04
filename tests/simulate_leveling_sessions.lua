@@ -60,6 +60,9 @@ local function createMock(kind, name, createdFrames, namedFrames)
     function methods:CreateTexture() return createMock("Texture", nil, createdFrames, namedFrames) end
     function methods:SetText(text) self.text = text end
     function methods:GetText() return self.text end
+    function methods:SetVertexColor(red, green, blue, alpha)
+        self.vertexColor = { red, green, blue, alpha }
+    end
     function methods:SetSize(width, height) self.width, self.height = width, height end
     function methods:SetWidth(width) self.width = width end
     function methods:SetHeight(height) self.height = height end
@@ -152,8 +155,8 @@ local function startSession(dateKey, seed, difficulty)
         addon = addon,
         frames = createdFrames,
         named = namedFrames,
-        complete = findButton(createdFrames, "Complete & Close"),
         swap = findButton(createdFrames, "Rest & Swap"),
+        minimize = findButton(createdFrames, "Minimize"),
         records = {},
     }
 end
@@ -169,21 +172,26 @@ local function runPrompt(session, eventName, label, level, shouldSwap)
 
     local mainFrame = assert(session.named.HoppdebaeseBoxFrame, "Main box window was not created")
     assert(mainFrame.scripts.OnUpdate, "Box update handler is missing")
-    for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+    for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 
     local first = assert(session.addon.currentChallenge, "Box did not select a challenge")
     assert(first == session.addon.boxItems[3], "Selected challenge is not the visible center row")
     local swappedFrom
     if shouldSwap and dailyGoals[first.id] then
         swappedFrom = first.text
+        assert(#HoppdebaeseDB.todo == 1, "Settled challenge was not queued")
         session.swap.scripts.OnClick(session.swap)
         assert(session.addon.sessionDisabled[first.id], "Rest & Swap did not disable " .. first.id)
-        for _ = 1, 50 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+        for _ = 1, 90 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+        assert(#HoppdebaeseDB.todo == 1, "Rest & Swap did not replace its Todo entry")
     end
 
     local selected = assert(session.addon.currentChallenge, "No challenge selected after swap")
     assert(not session.addon.sessionDisabled[selected.id], "Selected a session-rested exercise: " .. selected.id)
-    session.complete.scripts.OnClick(session.complete)
+    assert(#HoppdebaeseDB.todo == 1, "Selected challenge is missing from Todo")
+    local complete = findButton(session.frames, "Complete")
+    complete.scripts.OnClick(complete)
+    assert(#HoppdebaeseDB.todo == 0, "Completed Todo entry was not removed")
     table.insert(session.records, {
         eventName = eventName,
         event = label,
@@ -389,12 +397,14 @@ local stapleCounts = { squats = 0, situps = 0, pushups = 0 }
 local mainFrame = assert(distributionSession.named.HoppdebaeseBoxFrame)
 for _ = 1, distributionTotal do
     distributionSession.addon:ShowChallenge("manual")
-    for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
-    local id = distributionSession.addon.currentChallenge.id
+    for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+    local challenge = distributionSession.addon.currentChallenge
+    local id = challenge.id
     if stapleCounts[id] then
         stapleCounts[id] = stapleCounts[id] + 1
         stapleHits = stapleHits + 1
     end
+    HoppdebaeseDB.todo = {}
 end
 
 local stapleShare = stapleHits / distributionTotal
@@ -414,8 +424,53 @@ distributionSession.addon:ShowChallenge("manual")
 local initialBottom = distributionSession.addon.boxItems[5]
 for _ = 1, 8 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 assert(distributionSession.addon.boxItems[5] == initialBottom, "Box moved before the 0.45 second delay")
-for _ = 1, 52 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+for _ = 1, 92 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 assert(distributionSession.addon.currentChallenge == distributionSession.addon.boxItems[3])
+
+-- The box follows the resized main frame, and low/high amounts retain their
+-- green/red range metadata for the row renderer.
+local originalBoxWidth = distributionSession.addon.boxVisual:GetWidth()
+mainFrame:SetSize(720, 610)
+mainFrame.scripts.OnSizeChanged(mainFrame)
+assert(distributionSession.addon.boxVisual:GetWidth() > originalBoxWidth, "Box width did not follow window resize")
+assert(distributionSession.addon.boxRows[1]:GetHeight() > 40, "Box rows did not grow with window height")
+
+local sawGreen, sawRed = false, false
+for _ = 1, 300 do
+    distributionSession.addon:ShowChallenge("manual")
+    for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+    local challenge = distributionSession.addon.currentChallenge
+    local color = distributionSession.addon.boxRows[3].background.vertexColor
+    if challenge.valueRatio and challenge.valueRatio <= 0.15 then
+        sawGreen = color[2] > color[1]
+    elseif challenge.valueRatio and challenge.valueRatio >= 0.85 then
+        sawRed = color[1] > color[2]
+    end
+    HoppdebaeseDB.todo = {}
+    if sawGreen and sawRed then break end
+end
+assert(sawGreen and sawRed, "Low/high challenge values did not render green/red")
+
+-- A pending Todo survives an addon reload and can only be completed there.
+distributionSession.addon:ShowChallenge("manual")
+for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+assert(#HoppdebaeseDB.todo == 1, "Pending Todo was not saved")
+local pendingTodoID = HoppdebaeseDB.todo[1].todoID
+savedDB = HoppdebaeseDB
+local reloadedSession = startSession("2026-11-07", 405, "medium")
+assert(HoppdebaeseDB.todo[1].todoID == pendingTodoID, "Pending Todo did not survive reload")
+assert(not pcall(findButton, reloadedSession.frames, "Complete & Close"), "Main completion button still exists")
+local todoComplete = findButton(reloadedSession.frames, "Complete")
+todoComplete.scripts.OnClick(todoComplete)
+assert(#HoppdebaeseDB.todo == 0, "Reloaded Todo could not be completed")
+
+local reloadedMain = reloadedSession.named.HoppdebaeseBoxFrame
+reloadedMain:Show()
+reloadedSession.minimize.scripts.OnClick(reloadedSession.minimize)
+assert(not reloadedMain:IsShown(), "Minimize did not hide the main window")
+
+distributionSession = reloadedSession
+mainFrame = reloadedMain
 
 -- Exactly the tenth completed quest should open the box; disabled triggers keep counting.
 mainFrame:Hide()
@@ -423,7 +478,7 @@ for _ = 1, 9 do distributionSession.addon.scripts.OnEvent(distributionSession.ad
 assert(not mainFrame:IsShown(), "Quest box opened before ten completed quests")
 distributionSession.addon.scripts.OnEvent(distributionSession.addon, "QUEST_TURNED_IN")
 assert(mainFrame:IsShown(), "Tenth completed quest did not open the box")
-for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 mainFrame:Hide()
 HoppdebaeseDB.triggers.quests = false
 for _ = 1, 10 do distributionSession.addon.scripts.OnEvent(distributionSession.addon, "QUEST_TURNED_IN") end
@@ -435,11 +490,11 @@ _G.IsInGuild = function() return true end
 guildMessages = {}
 HoppdebaeseDB.announceGuild = true
 distributionSession.addon:ShowChallenge("manual")
-for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 assert(#guildMessages == 1 and guildMessages[1].channel == "GUILD", "Guild announcement missing")
 HoppdebaeseDB.announceGuild = false
 distributionSession.addon:ShowChallenge("manual")
-for _ = 1, 60 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 assert(#guildMessages == 1, "Disabled guild announcements still sent a message")
 
 print("ALL_DIFFICULTIES_SIMULATION_PASS")

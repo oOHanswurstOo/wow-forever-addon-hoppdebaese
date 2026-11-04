@@ -7,6 +7,7 @@ addon.sessionDisabled = {}
 local BACKDROP_TEMPLATE = BackdropTemplateMixin and "BackdropTemplate" or nil
 
 local DEFAULTS = {
+    schemaVersion = 1,
     difficulty = "medium",
     stats = {},
     completionCounts = {},
@@ -14,6 +15,8 @@ local DEFAULTS = {
     completedChallenges = 0,
     questsCompleted = 0,
     announceGuild = true,
+    todo = {},
+    nextTodoID = 0,
     daily = {
         date = "",
         stats = {},
@@ -53,39 +56,44 @@ local LEVEL_TIERS = {
 }
 
 local ICONS = {
-    strength = "Interface\\Icons\\Ability_Warrior_InnerRage",
-    movement = "Interface\\Icons\\Ability_Rogue_Sprint",
-    core = "Interface\\Icons\\Spell_Holy_BlessingOfStrength",
+    legs = "Interface\\Icons\\INV_Boots_05",
+    push = "Interface\\Icons\\Ability_Warrior_InnerRage",
+    hold = "Interface\\Icons\\Ability_Warrior_DefensiveStance",
+    cardio = "Interface\\Icons\\Ability_Rogue_Sprint",
+    balance = "Interface\\Icons\\Spell_Nature_Strength",
+    pull = "Interface\\Icons\\Ability_Warrior_ShieldBash",
+    press = "Interface\\Icons\\Ability_DualWield",
+    arms = "Interface\\Icons\\INV_Hammer_04",
     weights = "Interface\\Icons\\INV_Stone_WeightStone_03",
     water = "Interface\\Icons\\INV_Drink_18",
     recovery = "Interface\\Icons\\Spell_Nature_Sleep",
 }
 
 local EXERCISES = {
-    { id = "squats", code = "sq", name = "Squats", label = "%d squats", value = "counts", unit = "reps", weight = 1.5, icon = ICONS.movement },
-    { id = "situps", code = "su", name = "Sit-ups", label = "%d sit-ups", value = "counts", unit = "reps", weight = 1.5, icon = ICONS.core },
-    { id = "wallSit", code = "ws", name = "Wall sit", label = "%d sec wall sit", value = "seconds", unit = "sec", icon = ICONS.core },
-    { id = "pushups", code = "pu", name = "Push-ups", label = "%d push-ups", value = "counts", unit = "reps", weight = 1.5, amountMultiplier = 1.6, icon = ICONS.strength },
-    { id = "jumpingJacks", code = "jj", name = "Jumping jacks", label = "%d jumping jacks", value = "counts", unit = "reps", icon = ICONS.movement },
-    { id = "plank", code = "pl", name = "Plank", label = "%d sec plank", value = "seconds", unit = "sec", icon = ICONS.core },
-    { id = "reverseLunges", code = "rl", name = "Reverse lunges", label = "%d reverse lunges", value = "counts", unit = "reps", icon = ICONS.movement },
-    { id = "calfRaises", code = "cr", name = "Calf raises", label = "%d calf raises", value = "counts", unit = "reps", icon = ICONS.movement },
-    { id = "gluteBridges", code = "gb", name = "Glute bridges", label = "%d glute bridges", value = "counts", unit = "reps", icon = ICONS.core },
-    { id = "birdDogs", code = "bd", name = "Bird-dogs", label = "%d bird-dogs", value = "counts", unit = "reps", icon = ICONS.core },
-    { id = "mountainClimbers", code = "mc", name = "Mountain climbers", label = "%d mountain climbers", value = "counts", unit = "reps", icon = ICONS.movement },
-    { id = "highKnees", code = "hk", name = "High knees", label = "%d high knees", value = "counts", unit = "reps", icon = ICONS.movement },
-    { id = "deadBugs", code = "db", name = "Dead bugs", label = "%d dead bugs", value = "counts", unit = "reps", icon = ICONS.core },
-    { id = "sidePlank", code = "sp", name = "Side plank", label = "%d sec side plank", value = "seconds", unit = "sec", icon = ICONS.core },
+    { id = "squats", code = "sq", name = "Squats", label = "%d squats", value = "counts", unit = "reps", weight = 1.5, icon = ICONS.legs },
+    { id = "situps", code = "su", name = "Sit-ups", label = "%d sit-ups", value = "counts", unit = "reps", weight = 1.5, icon = ICONS.balance },
+    { id = "wallSit", code = "ws", name = "Wall sit", label = "%d sec wall sit", value = "seconds", unit = "sec", icon = ICONS.hold },
+    { id = "pushups", code = "pu", name = "Push-ups", label = "%d push-ups", value = "counts", unit = "reps", weight = 1.5, amountMultiplier = 1.6, icon = ICONS.push },
+    { id = "jumpingJacks", code = "jj", name = "Jumping jacks", label = "%d jumping jacks", value = "counts", unit = "reps", icon = ICONS.cardio },
+    { id = "plank", code = "pl", name = "Plank", label = "%d sec plank", value = "seconds", unit = "sec", icon = ICONS.hold },
+    { id = "reverseLunges", code = "rl", name = "Reverse lunges", label = "%d reverse lunges", value = "counts", unit = "reps", icon = ICONS.legs },
+    { id = "calfRaises", code = "cr", name = "Calf raises", label = "%d calf raises", value = "counts", unit = "reps", icon = ICONS.legs },
+    { id = "gluteBridges", code = "gb", name = "Glute bridges", label = "%d glute bridges", value = "counts", unit = "reps", icon = ICONS.balance },
+    { id = "birdDogs", code = "bd", name = "Bird-dogs", label = "%d bird-dogs", value = "counts", unit = "reps", icon = ICONS.balance },
+    { id = "mountainClimbers", code = "mc", name = "Mountain climbers", label = "%d mountain climbers", value = "counts", unit = "reps", icon = ICONS.cardio },
+    { id = "highKnees", code = "hk", name = "High knees", label = "%d high knees", value = "counts", unit = "reps", icon = ICONS.cardio },
+    { id = "deadBugs", code = "db", name = "Dead bugs", label = "%d dead bugs", value = "counts", unit = "reps", icon = ICONS.balance },
+    { id = "sidePlank", code = "sp", name = "Side plank", label = "%d sec side plank", value = "seconds", unit = "sec", icon = ICONS.hold },
     { id = "benchPress", code = "bp", name = "Bench presses", label = "%d bench presses", value = "toolCounts", unit = "reps", tool = "bench", icon = ICONS.weights },
-    { id = "pullups", code = "up", name = "Pull-ups", label = "%d pull-ups", value = "toolCounts", unit = "reps", tool = "pullupBar", icon = ICONS.strength },
-    { id = "dumbbellCurls", code = "dc", name = "Dumbbell curls", label = "%d dumbbell curls", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
-    { id = "dumbbellRows", code = "dr", name = "Dumbbell rows", label = "%d dumbbell rows", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
-    { id = "seatedShoulderPress", code = "ds", name = "Seated dumbbell shoulder presses", label = "%d seated dumbbell shoulder presses", value = "toolCounts", unit = "reps", tools = { "bench", "dumbbells" }, icon = ICONS.weights },
-    { id = "lateralRaises", code = "lr", name = "Lateral raises", label = "%d lateral raises", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
-    { id = "overheadTriceps", code = "ot", name = "Overhead triceps extensions", label = "%d overhead triceps extensions", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
-    { id = "hammerCurls", code = "hc", name = "Hammer curls", label = "%d hammer curls", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.weights },
-    { id = "treadmillWalk", code = "tw", name = "Treadmill walk", label = "%d min treadmill walk", fixedValues = { min = 5, max = 15 }, unit = "min", tool = "treadmill", icon = ICONS.movement },
-    { id = "treadmillRun", code = "tr", name = "Treadmill run", label = "%d min treadmill run", fixedValues = { min = 3, max = 10 }, unit = "min", tool = "treadmill", icon = ICONS.movement },
+    { id = "pullups", code = "up", name = "Pull-ups", label = "%d pull-ups", value = "toolCounts", unit = "reps", tool = "pullupBar", icon = ICONS.pull },
+    { id = "dumbbellCurls", code = "dc", name = "Dumbbell curls", label = "%d dumbbell curls", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.arms },
+    { id = "dumbbellRows", code = "dr", name = "Dumbbell rows", label = "%d dumbbell rows", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.pull },
+    { id = "seatedShoulderPress", code = "ds", name = "Seated dumbbell shoulder presses", label = "%d seated dumbbell shoulder presses", value = "toolCounts", unit = "reps", tools = { "bench", "dumbbells" }, icon = ICONS.press },
+    { id = "lateralRaises", code = "lr", name = "Lateral raises", label = "%d lateral raises", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.press },
+    { id = "overheadTriceps", code = "ot", name = "Overhead triceps extensions", label = "%d overhead triceps extensions", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.push },
+    { id = "hammerCurls", code = "hc", name = "Hammer curls", label = "%d hammer curls", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.arms },
+    { id = "treadmillWalk", code = "tw", name = "Treadmill walk", label = "%d min treadmill walk", fixedValues = { min = 5, max = 15 }, unit = "min", tool = "treadmill", icon = ICONS.legs },
+    { id = "treadmillRun", code = "tr", name = "Treadmill run", label = "%d min treadmill run", fixedValues = { min = 3, max = 10 }, unit = "min", tool = "treadmill", icon = ICONS.cardio },
 }
 
 local EASY_CHALLENGES = {
@@ -174,6 +182,31 @@ local function CopyDefaults(source, destination)
             destination[key] = value
         end
     end
+end
+
+local function CloneTable(source)
+    local clone = {}
+    for key, value in pairs(source) do
+        clone[key] = type(value) == "table" and CloneTable(value) or value
+    end
+    return clone
+end
+
+local function HasProgress(database)
+    return type(database) == "table"
+        and ((tonumber(database.completedChallenges) or 0) > 0
+            or (type(database.stats) == "table" and next(database.stats) ~= nil))
+end
+
+local function InitializeDatabase()
+    -- Older builds used an account-wide name. Migrate it only when this character
+    -- has no progress, then keep the new per-character name stable across updates.
+    if not HasProgress(HoppdebaeseDB) and HasProgress(GuildFitWheelDB) then
+        HoppdebaeseDB = CloneTable(GuildFitWheelDB)
+    end
+    HoppdebaeseDB = HoppdebaeseDB or {}
+    CopyDefaults(DEFAULTS, HoppdebaeseDB)
+    HoppdebaeseDB.schemaVersion = DEFAULTS.schemaVersion
 end
 
 local function GetPlayerLevel(overrideLevel)
@@ -265,8 +298,15 @@ local function BuildChallenge(exercise, tier, multiplier)
     local values = exercise.values or exercise.fixedValues or tier[exercise.value]
     local amountMultiplier = exercise.amountMultiplier or 1
     local amount = math.max(1, math.floor((PickValue(values) * multiplier * amountMultiplier) + 0.5))
+    local minimum = math.max(1, math.floor((values.min * multiplier * amountMultiplier) + 0.5))
+    local maximum = math.max(minimum, math.floor((values.max * multiplier * amountMultiplier) + 0.5))
     local remaining = GetRemainingDailyGoal(exercise.id)
-    if remaining then amount = math.min(amount, remaining) end
+    if remaining then
+        amount = math.min(amount, remaining)
+        maximum = math.min(maximum, remaining)
+        minimum = math.min(minimum, maximum)
+    end
+    local valueRatio = maximum > minimum and ((amount - minimum) / (maximum - minimum)) or 0
     return {
         id = exercise.id,
         code = exercise.code,
@@ -275,6 +315,7 @@ local function BuildChallenge(exercise, tier, multiplier)
         amount = amount,
         unit = exercise.unit,
         icon = exercise.icon,
+        valueRatio = math.max(0, math.min(1, valueRatio)),
     }
 end
 
@@ -455,9 +496,8 @@ local function StoreGuildCompletionCounts(sender, message)
     HoppdebaeseDB.guildStats[sender] = profile
 end
 
-local function CompleteCurrentChallenge()
-    local challenge = addon.currentChallenge
-    if not challenge or addon.rolling then return end
+local function CreditChallenge(challenge)
+    if not challenge then return end
     HoppdebaeseDB.stats[challenge.id] = (HoppdebaeseDB.stats[challenge.id] or 0) + challenge.amount
     HoppdebaeseDB.completionCounts[challenge.id] = (HoppdebaeseDB.completionCounts[challenge.id] or 0) + 1
     HoppdebaeseDB.completedChallenges = (HoppdebaeseDB.completedChallenges or 0) + 1
@@ -471,7 +511,46 @@ local function CompleteCurrentChallenge()
     end
     BroadcastStats(true)
     if addon.RefreshProgress then addon:RefreshProgress() end
-    addon.mainFrame:Hide()
+end
+
+local function RemoveTodo(todoID)
+    for index, item in ipairs(HoppdebaeseDB.todo) do
+        if item.todoID == todoID then
+            table.remove(HoppdebaeseDB.todo, index)
+            if addon.RefreshTodo then addon:RefreshTodo() end
+            return true
+        end
+    end
+    return false
+end
+
+local function CompleteTodo(todoID)
+    for _, item in ipairs(HoppdebaeseDB.todo) do
+        if item.todoID == todoID then
+            CreditChallenge(item)
+            RemoveTodo(todoID)
+            return
+        end
+    end
+end
+
+local function AddTodo(challenge)
+    HoppdebaeseDB.nextTodoID = (HoppdebaeseDB.nextTodoID or 0) + 1
+    local item = {
+        todoID = HoppdebaeseDB.nextTodoID,
+        id = challenge.id,
+        code = challenge.code,
+        name = challenge.name,
+        text = challenge.text,
+        amount = challenge.amount,
+        unit = challenge.unit,
+        icon = challenge.icon,
+        trigger = addon.currentTrigger,
+        createdAt = time and time() or 0,
+    }
+    table.insert(HoppdebaeseDB.todo, item)
+    addon.currentTodoID = item.todoID
+    if addon.RefreshTodo then addon:RefreshTodo() end
 end
 
 local function AddBackdrop(frame)
@@ -506,12 +585,53 @@ end
 
 local BOX_ROW_COUNT = 5
 local BOX_CENTER_ROW = 3
+local BOX_ROLL_DURATION = 4
+
+local function SetBoxRowColor(row, challenge, selected)
+    if not challenge or challenge.valueRatio == nil then
+        row.background:SetVertexColor(0.08, 0.16, 0.18, selected and 0.95 or 0.72)
+        return
+    end
+
+    local ratio = challenge.valueRatio
+    local red, green, blue
+    if ratio <= 0.5 then
+        local blend = ratio * 2
+        red = 0.10 + (0.45 * blend)
+        green = 0.43 + (0.05 * blend)
+        blue = 0.19 - (0.09 * blend)
+    else
+        local blend = (ratio - 0.5) * 2
+        red = 0.55 + (0.08 * blend)
+        green = 0.48 - (0.35 * blend)
+        blue = 0.10
+    end
+    row.background:SetVertexColor(red, green, blue, selected and 0.96 or 0.72)
+end
 
 local function RefreshBoxRows()
     for index, row in ipairs(addon.boxRows or {}) do
         local challenge = addon.boxItems and addon.boxItems[index]
         row.text:SetText(challenge and challenge.text or "...")
         row.icon:SetTexture(challenge and challenge.icon or nil)
+        SetBoxRowColor(row, challenge, index == BOX_CENTER_ROW)
+    end
+end
+
+local function LayoutBox(frame)
+    if not addon.boxVisual then return end
+    local boxWidth = math.max(390, frame:GetWidth() - 70)
+    local boxHeight = math.max(226, frame:GetHeight() - 150)
+    local gap = 4
+    local rowHeight = math.floor((boxHeight - ((BOX_ROW_COUNT - 1) * gap)) / BOX_ROW_COUNT)
+    local iconSize = math.max(28, math.min(44, rowHeight - 8))
+
+    addon.boxVisual:SetSize(boxWidth, boxHeight)
+    for index, row in ipairs(addon.boxRows or {}) do
+        row:SetSize(boxWidth, rowHeight)
+        row:ClearAllPoints()
+        row:SetPoint("TOP", 0, -((index - 1) * (rowHeight + gap)))
+        row.icon:SetSize(iconSize, iconSize)
     end
 end
 
@@ -534,12 +654,13 @@ local function StopBoxRoll()
     addon.rollElapsed = 0
     addon.rollStepElapsed = 0
     addon.currentChallenge = addon.boxItems[BOX_CENTER_ROW]
+    AddTodo(addon.currentChallenge)
     if HoppdebaeseDB.announceGuild and IsInGuild() and type(SendChatMessage) == "function" then
         SendChatMessage("Hoppdebäse challenge: " .. addon.currentChallenge.text, "GUILD")
     end
     addon.debugRollButton:Enable()
     addon.swapButton:Enable()
-    addon.completeButton:Enable()
+    addon.minimizeButton:Enable()
 end
 
 local function StartBoxRoll(delay)
@@ -552,13 +673,14 @@ local function StartBoxRoll(delay)
     FillBoxItems()
     addon.debugRollButton:Disable()
     addon.swapButton:Disable()
-    addon.completeButton:Disable()
+    addon.minimizeButton:Disable()
 end
 
 local function CreateBoxVisual(parent)
     local box = CreateFrame("Frame", nil, parent)
-    box:SetSize(400, 226)
+    box:SetSize(390, 226)
     box:SetPoint("TOP", 0, -68)
+    addon.boxVisual = box
     addon.boxRows = {}
 
     for index = 1, BOX_ROW_COUNT do
@@ -569,11 +691,8 @@ local function CreateBoxVisual(parent)
         local background = row:CreateTexture(nil, "BACKGROUND")
         background:SetAllPoints()
         background:SetTexture("Interface\\Buttons\\WHITE8X8")
-        if index == BOX_CENTER_ROW then
-            background:SetVertexColor(0.13, 0.42, 0.30, 0.95)
-        else
-            background:SetVertexColor(0.07, 0.09, 0.10, 0.75)
-        end
+        background:SetVertexColor(0.07, 0.09, 0.10, 0.75)
+        row.background = background
 
         local icon = row:CreateTexture(nil, "ARTWORK")
         icon:SetSize(32, 32)
@@ -593,6 +712,7 @@ local function CreateBoxVisual(parent)
     selected:SetPoint("RIGHT", box, "LEFT", -7, 0)
     selected:SetText(">")
     selected:SetTextColor(1, 0.82, 0.28)
+    LayoutBox(parent)
 end
 
 local function CreateMainWindow()
@@ -626,6 +746,7 @@ local function CreateMainWindow()
             HoppdebaeseDB.window.width = self:GetWidth()
             HoppdebaeseDB.window.height = self:GetHeight()
         end
+        LayoutBox(self)
     end)
     AddBackdrop(frame)
 
@@ -649,6 +770,8 @@ local function CreateMainWindow()
     swap:SetPoint("LEFT", debugRoll, "RIGHT", 8, 0)
     swap:SetScript("OnClick", function()
         local previousID = addon.currentChallenge and addon.currentChallenge.id
+        if addon.currentTodoID then RemoveTodo(addon.currentTodoID) end
+        addon.currentTodoID = nil
         if previousID and DAILY_GOALS[previousID] then
             addon.sessionDisabled[previousID] = true
         end
@@ -656,10 +779,10 @@ local function CreateMainWindow()
     end)
     addon.swapButton = swap
 
-    local complete = CreateButton(frame, "Complete & Close", 140)
-    complete:SetPoint("BOTTOMRIGHT", -20, 24)
-    complete:SetScript("OnClick", CompleteCurrentChallenge)
-    addon.completeButton = complete
+    local minimize = CreateButton(frame, "Minimize", 100)
+    minimize:SetPoint("BOTTOMRIGHT", -20, 24)
+    minimize:SetScript("OnClick", function() frame:Hide() end)
+    addon.minimizeButton = minimize
 
     local settings = CreateButton(frame, "Settings", 76)
     settings:SetPoint("TOPRIGHT", -14, -14)
@@ -668,6 +791,11 @@ local function CreateMainWindow()
     local leaderboard = CreateButton(frame, "Leaderboard", 96)
     leaderboard:SetPoint("TOPLEFT", 14, -14)
     leaderboard:SetScript("OnClick", function() addon.leaderboardFrame:Show() end)
+
+    local todo = CreateButton(frame, "Todo", 72)
+    todo:SetPoint("LEFT", leaderboard, "RIGHT", 8, 0)
+    todo:SetScript("OnClick", function() addon.todoFrame:Show() end)
+    addon.todoButton = todo
 
     local progress = CreateButton(frame, "Progress", 80)
     progress:SetPoint("TOPLEFT", 14, -44)
@@ -698,13 +826,13 @@ local function CreateMainWindow()
 
         addon.rollElapsed = addon.rollElapsed + elapsed
         addon.rollStepElapsed = addon.rollStepElapsed + elapsed
-        local progress = math.min(addon.rollElapsed / 2, 1)
-        local stepInterval = 0.045 + (progress * progress * 0.16)
+        local progress = math.min(addon.rollElapsed / BOX_ROLL_DURATION, 1)
+        local stepInterval = 0.035 + (progress * progress * progress * 0.30)
         while addon.rollStepElapsed >= stepInterval do
             addon.rollStepElapsed = addon.rollStepElapsed - stepInterval
             AdvanceBox()
         end
-        if addon.rollElapsed >= 2 then StopBoxRoll() end
+        if addon.rollElapsed >= BOX_ROLL_DURATION then StopBoxRoll() end
     end)
     frame:Hide()
     addon.mainFrame = frame
@@ -850,6 +978,91 @@ local function CreateLeaderboardWindow()
     frame:SetScript("OnShow", function() RefreshLeaderboard(true) end)
     frame:Hide()
     addon.leaderboardFrame = frame
+end
+
+local function CreateTodoWindow()
+    local frame = CreateFrame("Frame", "HoppdebaeseTodo", UIParent, BACKDROP_TEMPLATE)
+    frame:SetSize(560, 470)
+    frame:SetPoint("CENTER", 25, 10)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    AddBackdrop(frame)
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 22, -20)
+    title:SetText("Hoppdebäse Todo")
+    title:SetTextColor(0.38, 0.95, 0.68)
+
+    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
+    addon.todoSubtitle = subtitle
+
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 22, -62)
+    scroll:SetPoint("BOTTOMRIGHT", -42, 58)
+
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(485, 1)
+    scroll:SetScrollChild(content)
+    addon.todoContent = content
+    addon.todoRows = {}
+
+    function addon:RefreshTodo()
+        if not self.todoRows then return end
+        for _, row in ipairs(self.todoRows) do row:Hide() end
+
+        for index, item in ipairs(HoppdebaeseDB.todo) do
+            local row = self.todoRows[index]
+            if not row then
+                row = CreateFrame("Frame", nil, self.todoContent)
+                row:SetSize(480, 50)
+
+                local background = row:CreateTexture(nil, "BACKGROUND")
+                background:SetAllPoints()
+                background:SetTexture("Interface\\Buttons\\WHITE8X8")
+                background:SetVertexColor(0.07, 0.11, 0.12, 0.85)
+
+                row.icon = row:CreateTexture(nil, "ARTWORK")
+                row.icon:SetSize(38, 38)
+                row.icon:SetPoint("LEFT", 6, 0)
+
+                row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                row.text:SetPoint("LEFT", row.icon, "RIGHT", 9, 0)
+                row.text:SetPoint("RIGHT", -112, 0)
+                row.text:SetJustifyH("LEFT")
+
+                row.complete = CreateButton(row, "Complete", 92)
+                row.complete:SetPoint("RIGHT", -7, 0)
+                row.complete:SetScript("OnClick", function(button) CompleteTodo(button.todoID) end)
+                self.todoRows[index] = row
+            end
+
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 2, -((index - 1) * 54))
+            row.icon:SetTexture(item.icon)
+            row.text:SetText(item.text)
+            row.complete.todoID = item.todoID
+            row:Show()
+        end
+
+        local count = #HoppdebaeseDB.todo
+        self.todoContent:SetHeight(math.max(1, count * 54))
+        self.todoSubtitle:SetText(count == 1 and "1 challenge waiting" or (count .. " challenges waiting"))
+        if self.todoButton then self.todoButton:SetText("Todo (" .. count .. ")") end
+    end
+
+    local close = CreateButton(frame, "Close", 100)
+    close:SetPoint("BOTTOMRIGHT", -22, 20)
+    close:SetScript("OnClick", function() frame:Hide() end)
+
+    frame:SetScript("OnShow", function() addon:RefreshTodo() end)
+    frame:Hide()
+    addon.todoFrame = frame
 end
 
 local function CreateProgressWindow()
@@ -1082,8 +1295,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddon = ...
         if loadedAddon ~= ADDON_NAME then return end
-        HoppdebaeseDB = HoppdebaeseDB or {}
-        CopyDefaults(DEFAULTS, HoppdebaeseDB)
+        InitializeDatabase()
         if not DIFFICULTIES[HoppdebaeseDB.difficulty] then HoppdebaeseDB.difficulty = "medium" end
         EnsureGuildIdentity()
         if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
@@ -1094,7 +1306,9 @@ addon:SetScript("OnEvent", function(self, event, ...)
         CreateSettingsWindow()
         CreateLeaderboardWindow()
         CreateProgressWindow()
+        CreateTodoWindow()
         CreateMainWindow()
+        self:RefreshTodo()
         RegisterOptionalEvent("LFG_COMPLETION_REWARD")
         RegisterOptionalEvent("DUNGEON_COMPLETED")
         RegisterOptionalEvent("CHALLENGE_MODE_COMPLETED")
@@ -1111,10 +1325,12 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 self.leaderboardFrame:Show()
             elseif command == "progress" or command == "overview" then
                 self.progressFrame:Show()
+            elseif command == "todo" or command == "tasks" then
+                self.todoFrame:Show()
             elseif command == "test" or command == "box" then
                 self:ShowChallenge("manual")
             else
-                print("|cff61f2adHoppdebäse|r: /hopp settings, /hopp progress, /hopp leaderboard, /hopp test")
+                print("|cff61f2adHoppdebäse|r: /hopp settings, /hopp todo, /hopp progress, /hopp leaderboard, /hopp test")
             end
         end
         return

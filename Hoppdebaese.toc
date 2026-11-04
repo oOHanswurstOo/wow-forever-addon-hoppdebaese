@@ -1,8 +1,9 @@
-## Interface: 11507
+## Interface: 16001
 ## Title: Hoppdebäse
 ## Notes: Scrolling workout challenge boxes and a guild fitness leaderboard.
 ## Author: Hoppdebäse
 ## Version: 0.1.0
+## SavedVariables: GuildFitWheelDB
 ## SavedVariablesPerCharacter: HoppdebaeseDB
 
 Hoppdebaese.lua
