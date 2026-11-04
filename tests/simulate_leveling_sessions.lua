@@ -1,0 +1,405 @@
+local addonPath = arg[1] or "Hoppdebaese.lua"
+
+local sourceFile = assert(io.open(addonPath, "r"))
+local addonSource = sourceFile:read("*a")
+sourceFile:close()
+
+local challengeInfo = {}
+local dailyGoals = {}
+for line in addonSource:gmatch("[^\n]+") do
+    local id, name, unit = line:match('id = "([^"]+)".-name = "([^"]+)".-unit = "([^"]+)"')
+    if id then challengeInfo[id] = { name = name, unit = unit } end
+
+    local goalID, easy, medium, hard, extreme = line:match(
+        '^%s*(%w+) = { easy = (%d+), medium = (%d+), hard = (%d+), extreme = (%d+) }'
+    )
+    if goalID then
+        dailyGoals[goalID] = {
+            easy = tonumber(easy),
+            medium = tonumber(medium),
+            hard = tonumber(hard),
+            extreme = tonumber(extreme),
+        }
+    end
+end
+
+local simulatedLevel = 1
+local simulatedDate = "2026-11-04"
+local clock = 0
+local savedDB
+local taxiHook
+
+local function shallowCopy(source)
+    local copy = {}
+    for key, value in pairs(source or {}) do copy[key] = value end
+    return copy
+end
+
+local function createMock(kind, name, createdFrames, namedFrames)
+    local object = {
+        kind = kind,
+        name = name,
+        scripts = {},
+        shown = false,
+        width = 500,
+        height = 400,
+        point = { "CENTER", nil, "CENTER", 0, 0 },
+    }
+
+    local methods = {}
+    function methods:SetScript(scriptName, callback) self.scripts[scriptName] = callback end
+    function methods:HookScript(scriptName, callback)
+        local previous = self.scripts[scriptName]
+        self.scripts[scriptName] = function(...)
+            if previous then previous(...) end
+            callback(...)
+        end
+    end
+    function methods:CreateFontString() return createMock("FontString", nil, createdFrames, namedFrames) end
+    function methods:CreateTexture() return createMock("Texture", nil, createdFrames, namedFrames) end
+    function methods:SetText(text) self.text = text end
+    function methods:GetText() return self.text end
+    function methods:SetSize(width, height) self.width, self.height = width, height end
+    function methods:SetWidth(width) self.width = width end
+    function methods:SetHeight(height) self.height = height end
+    function methods:GetWidth() return self.width end
+    function methods:GetHeight() return self.height end
+    function methods:SetPoint(point, _, relativePoint, x, y)
+        self.point = { point or "CENTER", nil, relativePoint or point or "CENTER", x or 0, y or 0 }
+    end
+    function methods:GetPoint() return unpack(self.point) end
+    function methods:Show()
+        self.shown = true
+        if self.scripts.OnShow then self.scripts.OnShow(self) end
+    end
+    function methods:Hide() self.shown = false end
+    function methods:IsShown() return self.shown end
+    function methods:Enable() self.enabled = true end
+    function methods:Disable() self.enabled = false end
+    function methods:SetChecked(value) self.checked = value end
+    function methods:GetChecked() return self.checked end
+    function methods:GetStringHeight()
+        local _, lines = (self.text or ""):gsub("\n", "\n")
+        return (lines + 1) * 14
+    end
+    function methods:RegisterEvent() end
+
+    setmetatable(object, {
+        __index = function(_, key)
+            if methods[key] then return methods[key] end
+            if key:match("^[A-Z]") then return function() end end
+            return nil
+        end,
+    })
+
+    if kind ~= "FontString" and kind ~= "Texture" then table.insert(createdFrames, object) end
+    if name then namedFrames[name] = object end
+    return object
+end
+
+local function installWoWMocks(createdFrames, namedFrames)
+    _G.unpack = _G.unpack or table.unpack
+    _G.UIParent = createMock("UIParent", nil, {}, {})
+    _G.BackdropTemplateMixin = nil
+    _G.SlashCmdList = {}
+    _G.C_ChatInfo = {
+        RegisterAddonMessagePrefix = function() return true end,
+        SendAddonMessage = function() end,
+    }
+    _G.CreateFrame = function(kind, name)
+        return createMock(kind, name, createdFrames, namedFrames)
+    end
+    _G.UnitLevel = function() return simulatedLevel end
+    _G.UnitName = function() return "Testhero" end
+    _G.UnitFullName = function() return "Testhero", "Testrealm" end
+    _G.GetGuildInfo = function() return nil end
+    _G.IsInGuild = function() return false end
+    _G.GetTime = function() clock = clock + 1; return clock end
+    _G.time = os.time
+    _G.date = function() return simulatedDate end
+    _G.Ambiguate = function(name) return name:match("^[^-]+") or name end
+    _G.hooksecurefunc = function(_, callback) taxiHook = callback end
+    _G.TakeTaxiNode = function() end
+end
+
+local function findButton(createdFrames, text)
+    for _, frame in ipairs(createdFrames) do
+        if frame.text == text and frame.scripts.OnClick then return frame end
+    end
+    error("Button not found: " .. text)
+end
+
+local function startSession(dateKey, seed, difficulty)
+    simulatedDate = dateKey
+    math.randomseed(seed)
+    local createdFrames, namedFrames = {}, {}
+    installWoWMocks(createdFrames, namedFrames)
+    _G.GuildFitWheelDB = savedDB
+
+    local chunk = assert(loadfile(addonPath))
+    chunk("Hoppdebaese")
+    local addon = createdFrames[1]
+    assert(addon and addon.scripts.OnEvent, "Addon event frame was not created")
+    addon.scripts.OnEvent(addon, "ADDON_LOADED", "Hoppdebaese")
+    GuildFitWheelDB.difficulty = difficulty
+    addon.scripts.OnEvent(addon, "PLAYER_LOGIN")
+
+    return {
+        addon = addon,
+        frames = createdFrames,
+        named = namedFrames,
+        complete = findButton(createdFrames, "Complete & Close"),
+        swap = findButton(createdFrames, "Rest & Swap"),
+        records = {},
+    }
+end
+
+local function runPrompt(session, eventName, label, level, shouldSwap)
+    if level then simulatedLevel = level end
+    if eventName == "FLIGHT" then
+        assert(taxiHook, "Taxi hook was not installed")
+        taxiHook()
+    else
+        session.addon.scripts.OnEvent(session.addon, eventName, level)
+    end
+
+    local mainFrame = assert(session.named.GuildFitWheelFrame, "Main window was not created")
+    assert(mainFrame.scripts.OnUpdate, "Spin update handler is missing")
+    mainFrame.scripts.OnUpdate(mainFrame, 2.1)
+
+    local first = assert(session.addon.currentChallenge, "Spin did not select a challenge")
+    local swappedFrom
+    if shouldSwap and dailyGoals[first.id] then
+        swappedFrom = first.text
+        session.swap.scripts.OnClick(session.swap)
+        assert(session.addon.sessionDisabled[first.id], "Rest & Swap did not disable " .. first.id)
+    end
+
+    local selected = assert(session.addon.currentChallenge, "No challenge selected after swap")
+    assert(not session.addon.sessionDisabled[selected.id], "Selected a session-rested exercise: " .. selected.id)
+    session.complete.scripts.OnClick(session.complete)
+    table.insert(session.records, {
+        eventName = eventName,
+        event = label,
+        level = simulatedLevel,
+        text = selected.text,
+        id = selected.id,
+        amount = selected.amount,
+        swappedFrom = swappedFrom,
+    })
+end
+
+local sessions = {
+    {
+        title = "Session 1: level 1 to 9",
+        date = "2026-11-04",
+        seed = 101,
+        events = {
+            { "PLAYER_LEVEL_UP", "Level 2", 2, true },
+            { "PLAYER_LEVEL_UP", "Level 3", 3 },
+            { "FLIGHT", "Flight path", nil },
+            { "PLAYER_LEVEL_UP", "Level 4", 4 },
+            { "PLAYER_LEVEL_UP", "Level 5", 5 },
+            { "PLAYER_DEAD", "Death", nil },
+            { "PLAYER_LEVEL_UP", "Level 6", 6 },
+            { "PLAYER_LEVEL_UP", "Level 7", 7 },
+            { "FLIGHT", "Flight path", nil },
+            { "PLAYER_LEVEL_UP", "Level 8", 8 },
+            { "DUNGEON_COMPLETED", "Dungeon complete", nil },
+            { "PLAYER_LEVEL_UP", "Level 9", 9 },
+        },
+    },
+    {
+        title = "Session 2: level 9 to 15",
+        date = "2026-11-05",
+        seed = 202,
+        events = {
+            { "PLAYER_LEVEL_UP", "Level 10", 10 },
+            { "FLIGHT", "Flight path", nil },
+            { "PLAYER_LEVEL_UP", "Level 11", 11 },
+            { "PLAYER_LEVEL_UP", "Level 12", 12 },
+            { "PLAYER_DEAD", "Death", nil, true },
+            { "PLAYER_LEVEL_UP", "Level 13", 13 },
+            { "DUNGEON_COMPLETED", "Dungeon complete", nil },
+            { "PLAYER_LEVEL_UP", "Level 14", 14 },
+            { "FLIGHT", "Flight path", nil },
+            { "PLAYER_LEVEL_UP", "Level 15", 15 },
+        },
+    },
+    {
+        title = "Session 3: level 15 to 20",
+        date = "2026-11-06",
+        seed = 303,
+        events = {
+            { "PLAYER_LEVEL_UP", "Level 16", 16 },
+            { "PLAYER_LEVEL_UP", "Level 17", 17 },
+            { "FLIGHT", "Flight path", nil },
+            { "PLAYER_LEVEL_UP", "Level 18", 18 },
+            { "PLAYER_DEAD", "Death", nil },
+            { "PLAYER_LEVEL_UP", "Level 19", 19 },
+            { "FLIGHT", "Flight path", nil, true },
+            { "PLAYER_LEVEL_UP", "Level 20", 20 },
+            { "DUNGEON_COMPLETED", "Dungeon complete", nil },
+        },
+    },
+}
+
+local function runDifficulty(difficulty)
+    savedDB = nil
+    simulatedLevel = 1
+    taxiHook = nil
+    local expectedPrompts = 0
+    local stapleChallenges = 0
+    local levelUpPrompts = 0
+    local levelUpWorkouts = 0
+    local extraEventPrompts = 0
+    local exerciseCounts = {}
+
+    print("\n============================================================")
+    print(string.upper(difficulty) .. " DIFFICULTY")
+    print("============================================================")
+
+    for _, definition in ipairs(sessions) do
+        local session = startSession(definition.date, definition.seed, difficulty)
+        for _, event in ipairs(definition.events) do
+            runPrompt(session, event[1], event[2], event[3], event[4])
+        end
+        expectedPrompts = expectedPrompts + #definition.events
+        savedDB = GuildFitWheelDB
+
+        print("\n" .. definition.title .. " (" .. definition.date .. ")")
+        local sessionLevelUps = 0
+        local sessionExtras = 0
+        local sessionTotals = {}
+        local sessionCounts = {}
+        for index, record in ipairs(session.records) do
+            local swapNote = record.swappedFrom and (" [rested " .. record.swappedFrom .. "]") or ""
+            print(string.format("%2d. %-18s -> %s%s", index, record.event, record.text, swapNote))
+            if record.id == "squats" or record.id == "situps" or record.id == "pushups" then
+                stapleChallenges = stapleChallenges + 1
+            end
+            if record.eventName == "PLAYER_LEVEL_UP" then
+                levelUpPrompts = levelUpPrompts + 1
+                sessionLevelUps = sessionLevelUps + 1
+                if dailyGoals[record.id] then levelUpWorkouts = levelUpWorkouts + 1 end
+            else
+                extraEventPrompts = extraEventPrompts + 1
+                sessionExtras = sessionExtras + 1
+            end
+            if dailyGoals[record.id] then
+                exerciseCounts[record.id] = (exerciseCounts[record.id] or 0) + 1
+            end
+            sessionTotals[record.id] = (sessionTotals[record.id] or 0) + record.amount
+            sessionCounts[record.id] = (sessionCounts[record.id] or 0) + 1
+        end
+        print(string.format(
+            "Session prompts: %d from level increments, %d from flights/death/dungeon",
+            sessionLevelUps,
+            sessionExtras
+        ))
+
+        print("Session exercise totals:")
+        local sessionIDs = {}
+        for id in pairs(sessionTotals) do table.insert(sessionIDs, id) end
+        table.sort(sessionIDs)
+        for _, id in ipairs(sessionIDs) do
+            local info = challengeInfo[id]
+            local amount = sessionTotals[id]
+            local goalText = "no daily cap"
+            if dailyGoals[id] then
+                local goal = dailyGoals[id][difficulty]
+                local dailyAmount = savedDB.daily.stats[id] or 0
+                assert(dailyAmount <= goal, string.format(
+                    "%s daily goal exceeded for %s: %d > %d",
+                    difficulty,
+                    id,
+                    dailyAmount,
+                    goal
+                ))
+                goalText = string.format("daily goal %d %s", goal, info.unit)
+            end
+            print(string.format(
+                "    %-20s %4d %-8s across %d challenge(s)  [%s]",
+                info.name,
+                amount,
+                info.unit,
+                sessionCounts[id],
+                goalText
+            ))
+        end
+    end
+
+    assert(savedDB.completedChallenges == expectedPrompts, string.format(
+        "%s: expected %d completed prompts, got %d",
+        difficulty,
+        expectedPrompts,
+        savedDB.completedChallenges
+    ))
+
+    print("\nAll-time overview after level 20:")
+    local completedIDs = {}
+    for id, count in pairs(savedDB.completionCounts) do
+        if count > 0 then table.insert(completedIDs, id) end
+    end
+    table.sort(completedIDs)
+    for _, id in ipairs(completedIDs) do
+        local info = challengeInfo[id]
+        print(string.format(
+            "    %-20s %4d %-8s across %d challenge(s)",
+            info.name,
+            savedDB.stats[id],
+            info.unit,
+            savedDB.completionCounts[id]
+        ))
+    end
+    print(string.format("Staple challenges: %d of %d", stapleChallenges, expectedPrompts))
+    print(string.format(
+        "Level increments: %d prompts (%d physical workouts, %d wellness prompts)",
+        levelUpPrompts,
+        levelUpWorkouts,
+        levelUpPrompts - levelUpWorkouts
+    ))
+    print(string.format("Extra event prompts: %d", extraEventPrompts))
+    print("Physical workout mix:")
+    local exerciseIDs = {}
+    for id in pairs(exerciseCounts) do table.insert(exerciseIDs, id) end
+    table.sort(exerciseIDs)
+    for _, id in ipairs(exerciseIDs) do
+        print(string.format("    %-20s %d challenge(s)", challengeInfo[id].name, exerciseCounts[id]))
+    end
+    print(string.format("Total completed challenges: %d", savedDB.completedChallenges))
+end
+
+for _, difficulty in ipairs({ "easy", "medium", "hard", "extreme" }) do runDifficulty(difficulty) end
+
+-- Daily caps intentionally alter long sessions, so test the raw selection weight
+-- separately without completing challenges or changing the available pool.
+savedDB = nil
+simulatedLevel = 20
+local distributionSession = startSession("2026-11-07", 404, "medium")
+local distributionTotal = 2000
+local stapleHits = 0
+local stapleCounts = { squats = 0, situps = 0, pushups = 0 }
+local mainFrame = assert(distributionSession.named.GuildFitWheelFrame)
+for _ = 1, distributionTotal do
+    distributionSession.addon:ShowChallenge("manual")
+    mainFrame.scripts.OnUpdate(mainFrame, 2.1)
+    local id = distributionSession.addon.currentChallenge.id
+    if stapleCounts[id] then
+        stapleCounts[id] = stapleCounts[id] + 1
+        stapleHits = stapleHits + 1
+    end
+end
+
+local stapleShare = stapleHits / distributionTotal
+assert(stapleShare > 0.24, string.format("Weighted staple share too low: %.1f%%", stapleShare * 100))
+assert(stapleShare < 0.35, string.format("Weighted staple share too high: %.1f%%", stapleShare * 100))
+print("\nWeighted selection over " .. distributionTotal .. " unchanged-pool spins:")
+print(string.format(
+    "    Squats: %d  |  Sit-ups: %d  |  Push-ups: %d  |  Combined: %.1f%%",
+    stapleCounts.squats,
+    stapleCounts.situps,
+    stapleCounts.pushups,
+    stapleShare * 100
+))
+print("ALL_DIFFICULTIES_SIMULATION_PASS")
