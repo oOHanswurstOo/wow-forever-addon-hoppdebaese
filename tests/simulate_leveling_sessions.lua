@@ -455,6 +455,33 @@ local distributionSession = startSession("2026-11-07", 404, "medium")
 distributionSession.help.scripts.OnClick(distributionSession.help)
 assert(distributionSession.named.HoppdebaeseHelp:IsShown(), "Help button did not open the reference window")
 distributionSession.named.HoppdebaeseHelp:Hide()
+
+-- Guild addon messages can echo back with a differently formatted realm. They
+-- must not create a second local-player row or alter old saved entries.
+local selfEchoKey = "Testhero-Test realm"
+distributionSession.addon.scripts.OnEvent(
+    distributionSession.addon,
+    "CHAT_MSG_ADDON",
+    "HOPPDEBASE",
+    "S|medium|z=1,sq=2",
+    "GUILD",
+    selfEchoKey
+)
+assert(HoppdebaeseDB.guildStats[selfEchoKey] == nil, "Self guild echo was stored")
+local legacySelfEntry = {
+    difficulty = "medium",
+    completedChallenges = 99,
+    stats = { squats = 999 },
+    completionCounts = { squats = 99 },
+}
+HoppdebaeseDB.guildStats[selfEchoKey] = legacySelfEntry
+distributionSession.named.HoppdebaeseLeaderboard:Show()
+local leaderboardText = distributionSession.addon.leaderboardText.text
+local _, playerRows = leaderboardText:gsub("Testhero", "")
+assert(playerRows == 1, "Leaderboard rendered the local player more than once")
+assert(HoppdebaeseDB.guildStats[selfEchoKey] == legacySelfEntry, "Legacy self entry was modified or deleted")
+distributionSession.named.HoppdebaeseLeaderboard:Hide()
+
 local distributionTotal = 2000
 local stapleHits = 0
 local stapleCounts = { squats = 0, situps = 0, pushups = 0 }

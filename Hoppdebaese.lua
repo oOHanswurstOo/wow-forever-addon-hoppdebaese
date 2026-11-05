@@ -433,8 +433,31 @@ local function GetPlayerName()
     local name, realm
     if UnitFullName then name, realm = UnitFullName("player") end
     name = name or UnitName("player") or "Player"
+    if not realm or realm == "" then
+        if GetNormalizedRealmName then realm = GetNormalizedRealmName() end
+        if (not realm or realm == "") and GetRealmName then realm = GetRealmName() end
+    end
     if realm and realm ~= "" then return name .. "-" .. realm end
     return name
+end
+
+local function NormalizeCharacterName(name)
+    local character, realm = (name or ""):match("^([^-]+)%-?(.*)$")
+    if not character then return "" end
+    character = string.lower(character)
+    realm = string.lower(realm or ""):gsub("[%s%-']", "")
+    return realm ~= "" and (character .. "-" .. realm) or character
+end
+
+local function IsCurrentPlayer(name)
+    local normalizedName = NormalizeCharacterName(name)
+    if normalizedName == NormalizeCharacterName(GetPlayerName()) then return true end
+
+    -- Same-realm addon senders may omit the realm entirely.
+    if not normalizedName:find("-", 1, true) then
+        return normalizedName == NormalizeCharacterName(UnitName("player"))
+    end
+    return false
 end
 
 local function SendGuildMessage(message)
@@ -522,6 +545,7 @@ end
 
 local function StoreGuildStats(sender, message)
     if not sender or sender == "" then return end
+    if IsCurrentPlayer(sender) then return end
     local difficulty, payload = message:match("^S|([^|]+)|(.*)$")
     if not difficulty or not DIFFICULTIES[difficulty] then return end
 
@@ -549,6 +573,7 @@ end
 
 local function StoreGuildCompletionCounts(sender, message)
     if not sender or sender == "" then return end
+    if IsCurrentPlayer(sender) then return end
     local payload = message:match("^C|(.*)$")
     if not payload then return end
 
@@ -974,7 +999,7 @@ local function BuildLeaderboardText()
     }
 
     for name, profile in pairs(HoppdebaeseDB.guildStats) do
-        if name ~= playerName and type(profile) == "table" and type(profile.stats) == "table" then
+        if not IsCurrentPlayer(name) and type(profile) == "table" and type(profile.stats) == "table" then
             table.insert(participants, {
                 name = name,
                 difficulty = profile.difficulty,
