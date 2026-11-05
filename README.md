@@ -2,7 +2,7 @@
 
 Hoppdebäse turns in-game milestones into realistic workout prompts. It supports
 level-ups, player deaths, flight path starts, dungeon completions, and every tenth
-completed quest, with
+completed quest or profession skill point milestone, with
 Easy, Medium, Hard, and Extreme scaling. Extreme doubles Hard challenge amounts
 and daily goals. Each physical exercise has a conservative daily goal; after
 filling its progress bar, that exercise rests until the next day.
@@ -27,7 +27,9 @@ filling its progress bar, that exercise rests until the next day.
 The responsive challenge box rolls quickly at first, slows substantially near
 the end of its four-second animation,
 and colors low amounts green through high amounts red. Every settled challenge
-is added to the persistent Todo window. Complete challenges there to credit
+is added to the persistent Todo window, which opens automatically after the roll.
+The translucent Todo panel can be resized and left open; its geometry is saved.
+Complete challenges there to credit
 daily and all-time progress. **Replace Exercise (Session)** replaces the latest
 Todo entry and excludes that physical exercise until relogging. Open **Rested**
 to view excluded exercises and restore any of them immediately. **Minimize**
@@ -36,6 +38,14 @@ opens the complete in-addon reference.
 
 When all available exercises are complete or resting, future boxes offer only
 standing/stretching, hydration, and eye-rest prompts.
+
+Profession skill milestones at 10, 20, 30, and so on use only wellness breaks
+for primary professions, Cooking, Fishing, and First Aid. These include
+**Stoßlüften**: open the window and walk around for 30 to 120 seconds.
+
+Pull-ups use dedicated ranges: Easy is always 1; Medium scales from 1-2 to 2-4;
+Hard scales from 2-3 to 4-5; Extreme is exactly double the corresponding Hard
+range. Event multipliers do not increase pull-up amounts.
 
 Challenges use built-in WoW icons, so no external copyrighted image files are
 distributed. Guild-chat announcements can be disabled in settings. Settings,

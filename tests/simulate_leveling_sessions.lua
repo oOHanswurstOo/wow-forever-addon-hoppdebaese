@@ -6,6 +6,10 @@ sourceFile:close()
 
 local challengeInfo = {}
 local dailyGoals = {}
+local freshAirMinimum, freshAirMaximum = addonSource:match(
+    'id = "freshAir".-values = { min = (%d+), max = (%d+) }.-fixedScale = true'
+)
+assert(tonumber(freshAirMinimum) == 30 and tonumber(freshAirMaximum) == 120, "Stoßlüften must remain 30-120 seconds")
 for line in addonSource:gmatch("[^\n]+") do
     local id, name, unit = line:match('id = "([^"]+)".-name = "([^"]+)".-unit = "([^"]+)"')
     if id then challengeInfo[id] = { name = name, unit = unit } end
@@ -29,6 +33,12 @@ local clock = 0
 local savedDB
 local taxiHook
 local guildMessages = {}
+local professionSkills = {
+    [1] = { name = "Alchemy", rank = 9 },
+    [2] = { name = "Fishing", rank = 19 },
+    [3] = { name = "Cooking", rank = 29 },
+    [4] = { name = "First Aid", rank = 39 },
+}
 
 local function shallowCopy(source)
     local copy = {}
@@ -62,6 +72,9 @@ local function createMock(kind, name, createdFrames, namedFrames)
     function methods:GetText() return self.text end
     function methods:SetVertexColor(red, green, blue, alpha)
         self.vertexColor = { red, green, blue, alpha }
+    end
+    function methods:SetBackdropColor(red, green, blue, alpha)
+        self.backdropColor = { red, green, blue, alpha }
     end
     function methods:SetSize(width, height) self.width, self.height = width, height end
     function methods:SetWidth(width) self.width = width end
@@ -127,6 +140,11 @@ local function installWoWMocks(createdFrames, namedFrames)
     _G.Ambiguate = function(name) return name:match("^[^-]+") or name end
     _G.hooksecurefunc = function(_, callback) taxiHook = callback end
     _G.TakeTaxiNode = function() end
+    _G.GetProfessions = function() return 1, nil, nil, 2, 3, 4 end
+    _G.GetProfessionInfo = function(index)
+        local profession = professionSkills[index]
+        return profession.name, nil, profession.rank, 300
+    end
 end
 
 local function findButton(createdFrames, text)
@@ -177,6 +195,7 @@ local function runPrompt(session, eventName, label, level, shouldSwap)
 
     local first = assert(session.addon.currentChallenge, "Box did not select a challenge")
     assert(first == session.addon.boxItems[3], "Selected challenge is not the visible center row")
+    assert(session.named.HoppdebaeseTodo:IsShown(), "Todo did not open after the challenge settled")
     local swappedFrom
     if shouldSwap and dailyGoals[first.id] then
         swappedFrom = first.text
@@ -393,6 +412,41 @@ end
 
 for _, difficulty in ipairs({ "easy", "medium", "hard", "extreme" }) do runDifficulty(difficulty) end
 
+-- Pull-ups use dedicated ranges and ignore event multipliers so Easy remains one.
+savedDB = nil
+simulatedLevel = 60
+local pullupSession = startSession("2026-11-07", 403, "medium")
+HoppdebaeseDB.tools.pullupBar = true
+for id in pairs(dailyGoals) do
+    if id ~= "pullups" then pullupSession.addon.sessionDisabled[id] = true end
+end
+local pullupMain = pullupSession.named.HoppdebaeseBoxFrame
+local function assertPullupRange(difficulty, level, minimum, maximum, trigger)
+    HoppdebaeseDB.difficulty = difficulty
+    for _ = 1, 25 do
+        pullupSession.addon:ShowChallenge(trigger or "manual", level)
+        for _ = 1, 100 do pullupMain.scripts.OnUpdate(pullupMain, 0.05) end
+        local challenge = assert(pullupSession.addon.currentChallenge)
+        assert(challenge.id == "pullups", "Pull-up range test selected " .. challenge.id)
+        assert(challenge.amount >= minimum and challenge.amount <= maximum, string.format(
+            "%s level %d pull-ups outside %d-%d: %d",
+            difficulty, level, minimum, maximum, challenge.amount
+        ))
+        HoppdebaeseDB.todo = {}
+    end
+end
+assertPullupRange("easy", 10, 1, 1)
+assertPullupRange("easy", 60, 1, 1, "death")
+assertPullupRange("medium", 20, 1, 2)
+assertPullupRange("medium", 40, 2, 3)
+assertPullupRange("medium", 60, 2, 4)
+assertPullupRange("hard", 20, 2, 3)
+assertPullupRange("hard", 40, 3, 4)
+assertPullupRange("hard", 60, 4, 5)
+assertPullupRange("extreme", 20, 4, 6)
+assertPullupRange("extreme", 40, 6, 8)
+assertPullupRange("extreme", 60, 8, 10)
+
 -- Daily caps intentionally alter long sessions, so test the raw selection weight
 -- separately without completing challenges or changing the available pool.
 savedDB = nil
@@ -405,6 +459,31 @@ local distributionTotal = 2000
 local stapleHits = 0
 local stapleCounts = { squats = 0, situps = 0, pushups = 0 }
 local mainFrame = assert(distributionSession.named.HoppdebaeseBoxFrame)
+local todoFrame = assert(distributionSession.named.HoppdebaeseTodo)
+assert(todoFrame.backdropColor and todoFrame.backdropColor[4] == 0.78, "Todo backdrop is not translucent")
+local originalTodoWidth = distributionSession.addon.todoContent:GetWidth()
+todoFrame:SetSize(700, 520)
+todoFrame.scripts.OnSizeChanged(todoFrame)
+assert(distributionSession.addon.todoContent:GetWidth() > originalTodoWidth, "Todo content did not follow window resize")
+assert(HoppdebaeseDB.todoWindow.width == 700 and HoppdebaeseDB.todoWindow.height == 520, "Todo size was not saved")
+
+-- Primary and secondary profession slots trigger wellness-only rolls at multiples of ten.
+for index, expectedName in ipairs({ "Alchemy", "Fishing", "Cooking", "First Aid" }) do
+    professionSkills[index].rank = professionSkills[index].rank + 1
+    mainFrame:Hide()
+    todoFrame:Hide()
+    distributionSession.addon.scripts.OnEvent(distributionSession.addon, "SKILL_LINES_CHANGED")
+    assert(mainFrame:IsShown(), expectedName .. " milestone did not open a challenge")
+    assert(distributionSession.addon.titleText.text == expectedName .. " Skill " .. professionSkills[index].rank)
+    for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+    assert(not dailyGoals[distributionSession.addon.currentChallenge.id], expectedName .. " selected a physical exercise")
+    assert(todoFrame:IsShown(), expectedName .. " milestone did not open Todo")
+    HoppdebaeseDB.todo = {}
+end
+professionSkills[1].rank = 11
+mainFrame:Hide()
+distributionSession.addon.scripts.OnEvent(distributionSession.addon, "SKILL_LINES_CHANGED")
+assert(not mainFrame:IsShown(), "Non-multiple profession skill opened a challenge")
 for _ = 1, distributionTotal do
     distributionSession.addon:ShowChallenge("manual")
     for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
@@ -493,6 +572,8 @@ local pendingTodoID = HoppdebaeseDB.todo[1].todoID
 savedDB = HoppdebaeseDB
 local reloadedSession = startSession("2026-11-07", 405, "medium")
 assert(HoppdebaeseDB.todo[1].todoID == pendingTodoID, "Pending Todo did not survive reload")
+assert(reloadedSession.named.HoppdebaeseTodo:GetWidth() == 700, "Todo width did not survive reload")
+assert(reloadedSession.named.HoppdebaeseTodo:GetHeight() == 520, "Todo height did not survive reload")
 assert(not pcall(findButton, reloadedSession.frames, "Complete & Close"), "Main completion button still exists")
 local todoComplete = findButton(reloadedSession.frames, "Complete")
 todoComplete.scripts.OnClick(todoComplete)

@@ -14,6 +14,7 @@ local DEFAULTS = {
     guildStats = {},
     completedChallenges = 0,
     questsCompleted = 0,
+    professionRanks = {},
     announceGuild = true,
     todo = {},
     nextTodoID = 0,
@@ -27,6 +28,7 @@ local DEFAULTS = {
         flight = true,
         dungeon = true,
         quests = true,
+        professions = true,
     },
     tools = {
         bench = false,
@@ -41,6 +43,14 @@ local DEFAULTS = {
         relativePoint = "CENTER",
         x = 0,
         y = 40,
+    },
+    todoWindow = {
+        width = 560,
+        height = 470,
+        point = "CENTER",
+        relativePoint = "CENTER",
+        x = 25,
+        y = 10,
     },
 }
 
@@ -71,9 +81,9 @@ local ICONS = {
 
 local EXERCISES = {
     { id = "squats", code = "sq", name = "Squats", label = "%d squats", value = "counts", unit = "reps", weight = 1.5, icon = ICONS.legs },
-    { id = "situps", code = "su", name = "Sit-ups", label = "%d sit-ups", value = "counts", unit = "reps", weight = 1.5, icon = ICONS.balance },
+    { id = "situps", code = "su", name = "Sit-ups", label = "%d sit-ups", value = "counts", unit = "reps", weight = 1.7, icon = ICONS.balance },
     { id = "wallSit", code = "ws", name = "Wall sit", label = "%d sec wall sit", value = "seconds", unit = "sec", icon = ICONS.hold },
-    { id = "pushups", code = "pu", name = "Push-ups", label = "%d push-ups", value = "counts", unit = "reps", weight = 1.5, amountMultiplier = 1.6, icon = ICONS.push },
+    { id = "pushups", code = "pu", name = "Push-ups", label = "%d push-ups", value = "counts", unit = "reps", weight = 1.7, amountMultiplier = 1.6, icon = ICONS.push },
     { id = "jumpingJacks", code = "jj", name = "Jumping jacks", label = "%d jumping jacks", value = "counts", unit = "reps", icon = ICONS.cardio },
     { id = "plank", code = "pl", name = "Plank", label = "%d sec plank", value = "seconds", unit = "sec", icon = ICONS.hold },
     { id = "reverseLunges", code = "rl", name = "Reverse lunges", label = "%d reverse lunges", value = "counts", unit = "reps", icon = ICONS.legs },
@@ -85,7 +95,15 @@ local EXERCISES = {
     { id = "deadBugs", code = "db", name = "Dead bugs", label = "%d dead bugs", value = "counts", unit = "reps", icon = ICONS.balance },
     { id = "sidePlank", code = "sp", name = "Side plank", label = "%d sec side plank", value = "seconds", unit = "sec", icon = ICONS.hold },
     { id = "benchPress", code = "bp", name = "Bench presses", label = "%d bench presses", value = "toolCounts", unit = "reps", tool = "bench", icon = ICONS.weights },
-    { id = "pullups", code = "up", name = "Pull-ups", label = "%d pull-ups", value = "toolCounts", unit = "reps", tool = "pullupBar", icon = ICONS.pull },
+    {
+        id = "pullups", code = "up", name = "Pull-ups", label = "%d pull-ups", unit = "reps", tool = "pullupBar", icon = ICONS.pull,
+        difficultyValues = {
+            easy = { { maxLevel = 999, min = 1, max = 1 } },
+            medium = { { maxLevel = 30, min = 1, max = 2 }, { maxLevel = 50, min = 2, max = 3 }, { maxLevel = 999, min = 2, max = 4 } },
+            hard = { { maxLevel = 30, min = 2, max = 3 }, { maxLevel = 50, min = 3, max = 4 }, { maxLevel = 999, min = 4, max = 5 } },
+            extreme = { { maxLevel = 30, min = 4, max = 6 }, { maxLevel = 50, min = 6, max = 8 }, { maxLevel = 999, min = 8, max = 10 } },
+        },
+    },
     { id = "dumbbellCurls", code = "dc", name = "Dumbbell curls", label = "%d dumbbell curls", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.arms },
     { id = "dumbbellRows", code = "dr", name = "Dumbbell rows", label = "%d dumbbell rows", value = "toolCounts", unit = "reps", tool = "dumbbells", icon = ICONS.pull },
     { id = "seatedShoulderPress", code = "ds", name = "Seated dumbbell shoulder presses", label = "%d seated dumbbell shoulder presses", value = "toolCounts", unit = "reps", tools = { "bench", "dumbbells" }, icon = ICONS.press },
@@ -103,6 +121,7 @@ local EASY_CHALLENGES = {
     { id = "breathing", code = "br", name = "Deep breaths", label = "Take %d slow, deep breaths", values = { min = 3, max = 6 }, unit = "breaths", icon = ICONS.recovery },
     { id = "eyeRest", code = "er", name = "Eye rest", text = "Look at something far away for 20 seconds", amount = 20, unit = "sec", icon = ICONS.recovery },
     { id = "shower", code = "sh", name = "Showers", text = "Take a shower", amount = 1, unit = "times", icon = ICONS.water },
+    { id = "freshAir", code = "fa", name = "Stosslüften", label = "Open the window and walk around for %d seconds", values = { min = 30, max = 120 }, fixedScale = true, unit = "sec", icon = ICONS.recovery },
 }
 
 local CHALLENGE_DESCRIPTIONS = {
@@ -136,6 +155,7 @@ local CHALLENGE_DESCRIPTIONS = {
     breathing = "Pause for slow, controlled deep breaths.",
     eyeRest = "Look away from the screen at a distant object.",
     shower = "Take a short refresh break and shower.",
+    freshAir = "Open the window fully and walk around while airing the room.",
 }
 
 local TRIGGER_INFO = {
@@ -144,6 +164,7 @@ local TRIGGER_INFO = {
     flight = { title = "Flight Path Challenge", multiplier = 0.75 },
     dungeon = { title = "Dungeon Complete Challenge", multiplier = 1.2 },
     quest = { title = "10 Quests Complete Challenge", multiplier = 1 },
+    profession = { title = "Profession Skill Milestone", multiplier = 1 },
     manual = { title = "Workout Challenge", multiplier = 1 },
 }
 
@@ -312,7 +333,16 @@ local function IsExerciseAvailable(exercise)
     return remaining == nil or remaining > 0
 end
 
-local function BuildChallenge(exercise, tier, multiplier)
+local function GetDifficultyValues(exercise, difficultyKey, level)
+    local ranges = exercise.difficultyValues and exercise.difficultyValues[difficultyKey]
+    if not ranges then return nil end
+    for _, values in ipairs(ranges) do
+        if level <= values.maxLevel then return values end
+    end
+    return ranges[#ranges]
+end
+
+local function BuildChallenge(exercise, tier, multiplier, difficultyKey, level)
     if exercise.text then
         local amount = exercise.amount or 1
         local remaining = GetRemainingDailyGoal(exercise.id)
@@ -328,11 +358,13 @@ local function BuildChallenge(exercise, tier, multiplier)
         }
     end
 
-    local values = exercise.values or exercise.fixedValues or tier[exercise.value]
+    local difficultyValues = GetDifficultyValues(exercise, difficultyKey, level)
+    local values = difficultyValues or exercise.values or exercise.fixedValues or tier[exercise.value]
     local amountMultiplier = exercise.amountMultiplier or 1
-    local amount = math.max(1, math.floor((PickValue(values) * multiplier * amountMultiplier) + 0.5))
-    local minimum = math.max(1, math.floor((values.min * multiplier * amountMultiplier) + 0.5))
-    local maximum = math.max(minimum, math.floor((values.max * multiplier * amountMultiplier) + 0.5))
+    local valueMultiplier = (difficultyValues or exercise.fixedScale) and 1 or multiplier * amountMultiplier
+    local amount = math.max(1, math.floor((PickValue(values) * valueMultiplier) + 0.5))
+    local minimum = math.max(1, math.floor((values.min * valueMultiplier) + 0.5))
+    local maximum = math.max(minimum, math.floor((values.max * valueMultiplier) + 0.5))
     local remaining = GetRemainingDailyGoal(exercise.id)
     if remaining then
         amount = math.min(amount, remaining)
@@ -354,11 +386,20 @@ end
 
 local function RollChallenge(triggerKey, excludedID)
     local trigger = TRIGGER_INFO[triggerKey] or TRIGGER_INFO.manual
-    local difficulty = DIFFICULTIES[HoppdebaeseDB.difficulty] or DIFFICULTIES.medium
-    local tier = GetTier(addon.pendingLevel or GetPlayerLevel())
+    local difficultyKey = HoppdebaeseDB.difficulty
+    local difficulty = DIFFICULTIES[difficultyKey] or DIFFICULTIES.medium
+    local level = GetPlayerLevel(addon.pendingLevel)
+    local tier = GetTier(level)
     local multiplier = difficulty.multiplier * trigger.multiplier
     local pool = {}
     local workoutCount = 0
+
+    if triggerKey == "profession" then
+        for _, challenge in ipairs(EASY_CHALLENGES) do
+            if challenge.id ~= excludedID then table.insert(pool, challenge) end
+        end
+        return BuildChallenge(PickWeighted(pool), tier, 1, difficultyKey, level)
+    end
 
     for _, exercise in ipairs(EXERCISES) do
         if exercise.id ~= excludedID and IsExerciseAvailable(exercise) then
@@ -385,7 +426,7 @@ local function RollChallenge(triggerKey, excludedID)
         end
     end
 
-    return BuildChallenge(PickWeighted(pool), tier, multiplier)
+    return BuildChallenge(PickWeighted(pool), tier, multiplier, difficultyKey, level)
 end
 
 local function GetPlayerName()
@@ -586,7 +627,7 @@ local function AddTodo(challenge)
     if addon.RefreshTodo then addon:RefreshTodo() end
 end
 
-local function AddBackdrop(frame)
+local function AddBackdrop(frame, opacity)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -595,7 +636,7 @@ local function AddBackdrop(frame)
         edgeSize = 16,
         insets = { left = 4, right = 4, top = 4, bottom = 4 },
     })
-    frame:SetBackdropColor(0.035, 0.045, 0.055, 0.96)
+    frame:SetBackdropColor(0.035, 0.045, 0.055, opacity or 0.96)
     frame:SetBackdropBorderColor(0.27, 0.72, 0.52, 1)
 end
 
@@ -701,6 +742,8 @@ local function StopBoxRoll()
     addon.rollStepElapsed = 0
     addon.currentChallenge = addon.boxItems[BOX_CENTER_ROW]
     AddTodo(addon.currentChallenge)
+    addon.todoFrame:Show()
+    addon.todoFrame:Raise()
     if HoppdebaeseDB.announceGuild and IsInGuild() and type(SendChatMessage) == "function" then
         SendChatMessage("Hoppdebäse challenge: " .. addon.currentChallenge.text, "GUILD")
     end
@@ -1044,16 +1087,35 @@ end
 
 local function CreateTodoWindow()
     local frame = CreateFrame("Frame", "HoppdebaeseTodo", UIParent, BACKDROP_TEMPLATE)
-    frame:SetSize(560, 470)
-    frame:SetPoint("CENTER", 25, 10)
+    frame:SetSize(math.max(HoppdebaeseDB.todoWindow.width, 360), math.max(HoppdebaeseDB.todoWindow.height, 280))
+    frame:SetPoint(
+        HoppdebaeseDB.todoWindow.point,
+        UIParent,
+        HoppdebaeseDB.todoWindow.relativePoint,
+        HoppdebaeseDB.todoWindow.x,
+        HoppdebaeseDB.todoWindow.y
+    )
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
     frame:SetMovable(true)
+    frame:SetResizable(true)
+    if frame.SetResizeBounds then
+        frame:SetResizeBounds(360, 280)
+    else
+        frame:SetMinResize(360, 280)
+    end
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    AddBackdrop(frame)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local point, _, relativePoint, x, y = self:GetPoint(1)
+        HoppdebaeseDB.todoWindow.point = point
+        HoppdebaeseDB.todoWindow.relativePoint = relativePoint
+        HoppdebaeseDB.todoWindow.x = x
+        HoppdebaeseDB.todoWindow.y = y
+    end)
+    AddBackdrop(frame, 0.78)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 22, -20)
@@ -1074,6 +1136,12 @@ local function CreateTodoWindow()
     addon.todoContent = content
     addon.todoRows = {}
 
+    local function LayoutTodo()
+        local contentWidth = math.max(285, frame:GetWidth() - 75)
+        content:SetWidth(contentWidth)
+        for _, row in ipairs(addon.todoRows) do row:SetWidth(contentWidth - 5) end
+    end
+
     function addon:RefreshTodo()
         if not self.todoRows then return end
         for _, row in ipairs(self.todoRows) do row:Hide() end
@@ -1082,7 +1150,7 @@ local function CreateTodoWindow()
             local row = self.todoRows[index]
             if not row then
                 row = CreateFrame("Frame", nil, self.todoContent)
-                row:SetSize(480, 50)
+                row:SetSize(math.max(280, self.todoContent:GetWidth() - 5), 50)
 
                 local background = row:CreateTexture(nil, "BACKGROUND")
                 background:SetAllPoints()
@@ -1122,7 +1190,29 @@ local function CreateTodoWindow()
     close:SetPoint("BOTTOMRIGHT", -22, 20)
     close:SetScript("OnClick", function() frame:Hide() end)
 
+    local resize = CreateFrame("Button", nil, frame)
+    resize:SetSize(20, 20)
+    resize:SetPoint("BOTTOMRIGHT", -3, 3)
+    resize:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resize:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resize:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resize:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then frame:StartSizing("BOTTOMRIGHT") end
+    end)
+    resize:SetScript("OnMouseUp", function()
+        frame:StopMovingOrSizing()
+        HoppdebaeseDB.todoWindow.width = frame:GetWidth()
+        HoppdebaeseDB.todoWindow.height = frame:GetHeight()
+    end)
+
+    frame:SetScript("OnSizeChanged", function(self)
+        HoppdebaeseDB.todoWindow.width = self:GetWidth()
+        HoppdebaeseDB.todoWindow.height = self:GetHeight()
+        LayoutTodo()
+    end)
+
     frame:SetScript("OnShow", function() addon:RefreshTodo() end)
+    LayoutTodo()
     frame:Hide()
     addon.todoFrame = frame
 end
@@ -1231,7 +1321,7 @@ local function BuildHelpText()
         "|cffffffffDebug: Roll Box|r - Starts a manual test roll.",
         "|cffffffffReplace Exercise (Session)|r - Replaces the current Todo challenge and excludes that physical exercise until you relog. Use Rested to undo it.",
         "|cffffffffMinimize|r - Hides the challenge box without removing its Todo entry.",
-        "|cffffffffTodo|r - Lists rolled challenges. Complete credits the amount to daily and all-time progress.",
+        "|cffffffffTodo|r - Opens automatically after a roll and lists pending challenges. It can be resized and left open; Complete credits progress.",
         "|cffffffffRested|r - Lists exercises excluded for this login session. Restore makes one available again.",
         "|cffffffffProgress|r - Shows daily caps, session-rested status, and all-time totals.",
         "|cffffffffLeaderboard|r - Requests and displays participating guild members' totals.",
@@ -1249,6 +1339,7 @@ local function BuildHelpText()
         "|cffffffffFlight path starts|r - Rolls when selecting a taxi, using a lighter 0.75x multiplier.",
         "|cffffffffDungeon completion|r - Rolls for supported dungeon-completion events with a 1.2x multiplier.",
         "|cffffffffEvery 10 quests|r - Counts quest turn-ins and rolls on each tenth completion.",
+        "|cffffffffEvery 10 profession skill points|r - Rolls a wellness break at skill 10, 20, 30, and so on for primary professions, Cooking, Fishing, and First Aid.",
         "|cffffffffGuild announcement|r - Posts the selected challenge to guild chat. Addon leaderboard sync remains separate.",
         "|cffffffffWorkout bench|r - Enables bench presses and helps unlock seated shoulder presses.",
         "|cffffffffPull-up bar|r - Enables pull-ups.",
@@ -1449,7 +1540,7 @@ end
 
 local function CreateSettingsWindow()
     local frame = CreateFrame("Frame", "HoppdebaeseSettings", UIParent, BACKDROP_TEMPLATE)
-    frame:SetSize(420, 540)
+    frame:SetSize(420, 590)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -1499,6 +1590,7 @@ local function CreateSettingsWindow()
         { key = "flight", text = "Flight path starts (easier)" },
         { key = "dungeon", text = "Dungeon completion" },
         { key = "quests", text = "Every 10 quests completed" },
+        { key = "professions", text = "Every 10 profession skill points" },
     }
     for index, info in ipairs(triggers) do
         local triggerKey = info.key
@@ -1508,20 +1600,20 @@ local function CreateSettingsWindow()
     end
 
     local sharingTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    sharingTitle:SetPoint("TOPLEFT", 24, -294)
+    sharingTitle:SetPoint("TOPLEFT", 24, -324)
     sharingTitle:SetText("Sharing")
 
-    CreateCheckButton(frame, "Announce rolled challenge in guild chat", 22, -308,
+    CreateCheckButton(frame, "Announce rolled challenge in guild chat", 22, -338,
         function() return HoppdebaeseDB.announceGuild end,
         function(value) HoppdebaeseDB.announceGuild = value end)
 
     local toolsTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    toolsTitle:SetPoint("TOPLEFT", 24, -350)
+    toolsTitle:SetPoint("TOPLEFT", 24, -380)
     toolsTitle:SetText("Equipment available at home")
 
     for index, info in ipairs(TOOL_LABELS) do
         local toolKey = info.key
-        CreateCheckButton(frame, info.text, 22, -364 - ((index - 1) * 30),
+        CreateCheckButton(frame, info.text, 22, -394 - ((index - 1) * 30),
             function() return HoppdebaeseDB.tools[toolKey] end,
             function(value) HoppdebaeseDB.tools[toolKey] = value end)
     end
@@ -1545,7 +1637,15 @@ function addon:ShowChallenge(triggerKey, level)
     local info = TRIGGER_INFO[triggerKey] or TRIGGER_INFO.manual
     self.currentTrigger = triggerKey
     self.pendingLevel = level
-    self.titleText:SetText(info.title)
+    if triggerKey == "profession" and self.pendingProfession then
+        self.titleText:SetText(string.format(
+            "%s Skill %d",
+            self.pendingProfession.name,
+            self.pendingProfession.milestone
+        ))
+    else
+        self.titleText:SetText(info.title)
+    end
     self.mainFrame:Show()
     self.mainFrame:Raise()
     StartBoxRoll(0.45)
@@ -1554,6 +1654,39 @@ end
 local function RegisterOptionalEvent(eventName)
     -- Clients differ in which completion events they expose; invalid events are ignored.
     pcall(addon.RegisterEvent, addon, eventName)
+end
+
+local function ScanProfessionSkills(allowChallenge)
+    if type(GetProfessions) ~= "function" or type(GetProfessionInfo) ~= "function" then return end
+
+    local professionIndices = { GetProfessions() }
+    local reachedMilestone
+    for slot = 1, 6 do
+        local professionIndex = professionIndices[slot]
+        if professionIndex then
+            local name, _, rank = GetProfessionInfo(professionIndex)
+            rank = tonumber(rank)
+            if name and rank then
+                local previousRank = tonumber(HoppdebaeseDB.professionRanks[name])
+                if allowChallenge and previousRank and rank > previousRank then
+                    local previousMilestone = math.floor(previousRank / 10)
+                    local currentMilestone = math.floor(rank / 10)
+                    if currentMilestone > previousMilestone then
+                        reachedMilestone = {
+                            name = name,
+                            milestone = currentMilestone * 10,
+                        }
+                    end
+                end
+                HoppdebaeseDB.professionRanks[name] = rank
+            end
+        end
+    end
+
+    if reachedMilestone and HoppdebaeseDB.triggers.professions then
+        addon.pendingProfession = reachedMilestone
+        addon:ShowChallenge("profession")
+    end
 end
 
 addon:SetScript("OnEvent", function(self, event, ...)
@@ -1581,6 +1714,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
         RegisterOptionalEvent("DUNGEON_COMPLETED")
         RegisterOptionalEvent("CHALLENGE_MODE_COMPLETED")
         RegisterOptionalEvent("SCENARIO_COMPLETED")
+        RegisterOptionalEvent("SKILL_LINES_CHANGED")
 
         SLASH_HOPPDEBASE1 = "/hopp"
         SLASH_HOPPDEBASE2 = "/hoppdebaese"
@@ -1622,6 +1756,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             if self.leaderboardFrame and self.leaderboardFrame:IsShown() then RefreshLeaderboard(false) end
         end
     elseif event == "PLAYER_LOGIN" then
+        ScanProfessionSkills(false)
         RequestGuildStats(false)
     elseif event == "PLAYER_GUILD_UPDATE" then
         RequestGuildStats(false)
@@ -1630,6 +1765,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
         if HoppdebaeseDB.triggers.quests and HoppdebaeseDB.questsCompleted % 10 == 0 then
             self:ShowChallenge("quest")
         end
+    elseif event == "SKILL_LINES_CHANGED" then
+        ScanProfessionSkills(true)
     elseif event == "PLAYER_LEVEL_UP" and HoppdebaeseDB.triggers.levelUp then
         self:ShowChallenge("levelUp", ...)
     elseif event == "PLAYER_DEAD" and HoppdebaeseDB.triggers.death then
