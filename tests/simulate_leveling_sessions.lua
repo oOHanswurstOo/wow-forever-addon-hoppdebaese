@@ -140,7 +140,7 @@ local function installWoWMocks(createdFrames, namedFrames)
     end
     _G.UnitLevel = function() return simulatedLevel end
     _G.UnitName = function() return "Testhero" end
-    _G.UnitFullName = function() return "Testhero", "Testrealm" end
+    _G.UnitFullName = function() return "Testhero", "Chrieger" end
     _G.GetGuildInfo = function() return nil end
     _G.IsInGuild = function() return false end
     _G.SendChatMessage = function(message, channel)
@@ -511,18 +511,29 @@ HoppdebaeseDB.guildStats["Otherhero-Testrealm"] = {
     stats = { squats = 20 },
     completionCounts = { squats = 2 },
 }
+distributionSession.addon.scripts.OnEvent(
+    distributionSession.addon,
+    "CHAT_MSG_ADDON",
+    "HOPPDEBASE",
+    "S|medium|z=3,sq=f",
+    "GUILD",
+    "Testhero Schami"
+)
+assert(HoppdebaeseDB.guildStats["Testhero Schami"], "Same-first-name guildmate was not stored")
 distributionSession.named.HoppdebaeseLeaderboard:Show()
 local leaderboardText = distributionSession.addon.leaderboardText.text
 local _, playerRows = leaderboardText:gsub("Testhero", "")
-assert(playerRows == 1, "Leaderboard rendered the local player more than once")
+assert(playerRows == 2, "Leaderboard omitted a guildmate who shares the local first name")
 assert(not leaderboardText:find(selfEchoKey, 1, true), "Leaderboard rendered the full-name self entry")
+assert(leaderboardText:find("Testhero Schami", 1, true), "Leaderboard omitted the distinct full-name guildmate")
 assert(leaderboardText:find(">> ", 1, true) and leaderboardText:find("(YOU)", 1, true), "Local leaderboard row is not highlighted")
 assert(HoppdebaeseDB.guildStats[selfEchoKey] == legacySelfEntry, "Legacy self entry was modified or deleted")
 distributionSession.named.HoppdebaeseLeaderboard:Hide()
 distributionSession.named.HoppdebaeseExerciseLeaderboard:Show()
 local exerciseLeaderboardText = distributionSession.addon.exerciseLeaderboardText.text
-assert(exerciseLeaderboardText:find("Total: 30 reps", 1, true), "Exercise leaderboard total is incorrect")
+assert(exerciseLeaderboardText:find("Total: 45 reps", 1, true), "Exercise leaderboard total is incorrect")
 assert(exerciseLeaderboardText:find("Otherhero", 1, true), "Exercise leaderboard omitted a top contributor")
+assert(exerciseLeaderboardText:find("Testhero Schami", 1, true), "Exercise leaderboard omitted the distinct full-name guildmate")
 assert(exerciseLeaderboardText:find("(YOU)", 1, true), "Local exercise standing is not highlighted")
 assert(not exerciseLeaderboardText:find(selfEchoKey, 1, true), "Exercise leaderboard rendered the full-name self entry")
 assert(HoppdebaeseDB.guildStats[selfEchoKey] == legacySelfEntry, "Exercise leaderboard modified legacy self data")

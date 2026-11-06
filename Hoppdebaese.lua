@@ -503,23 +503,12 @@ local function GetPlayerName()
 end
 
 local function NormalizeCharacterName(name)
-    local character, realm = (name or ""):match("^([^-]+)%-?(.*)$")
-    if not character then return "" end
-    character = string.lower(character)
-    realm = string.lower(realm or ""):gsub("[%s%-']", "")
-    return realm ~= "" and (character .. "-" .. realm) or character
+    return string.lower(name or ""):gsub("[%s%-']", "")
 end
 
 local function IsCurrentPlayer(name)
     local normalizedName = NormalizeCharacterName(name)
-    if normalizedName == NormalizeCharacterName(GetPlayerName()) then return true end
-
-    -- Cached addon messages can retain an old or differently formatted realm.
-    -- Character names are unique enough for this display-only self filter, and
-    -- no stored profile is removed or rewritten.
-    local candidateCharacter = normalizedName:match("^([^%s%-]+)") or normalizedName
-    local playerCharacter = NormalizeCharacterName(UnitName("player")):match("^([^%s%-]+)")
-    return candidateCharacter ~= "" and candidateCharacter == playerCharacter
+    return normalizedName ~= "" and normalizedName == NormalizeCharacterName(GetPlayerName())
 end
 
 local function SendGuildMessage(message)
