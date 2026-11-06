@@ -517,8 +517,8 @@ local function IsCurrentPlayer(name)
     -- Cached addon messages can retain an old or differently formatted realm.
     -- Character names are unique enough for this display-only self filter, and
     -- no stored profile is removed or rewritten.
-    local candidateCharacter = normalizedName:match("^([^-]+)") or normalizedName
-    local playerCharacter = NormalizeCharacterName(UnitName("player")):match("^([^-]+)")
+    local candidateCharacter = normalizedName:match("^([^%s%-]+)") or normalizedName
+    local playerCharacter = NormalizeCharacterName(UnitName("player")):match("^([^%s%-]+)")
     return candidateCharacter ~= "" and candidateCharacter == playerCharacter
 end
 
