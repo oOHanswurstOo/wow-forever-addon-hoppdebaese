@@ -9,8 +9,8 @@ filling its progress bar, that exercise rests until the next day.
 
 ## Install
 
-1. Extract the `Hoppdebaese` folder into your game's `Interface/AddOns` folder.
-2. Ensure the path is `Interface/AddOns/Hoppdebaese/Hoppdebaese.toc`.
+1. Extract the lowercase `hoppdebaese` folder into your game's `Interface/AddOns` folder.
+2. Ensure the exact path is `Interface/AddOns/hoppdebaese/Hoppdebaese.toc`. On case-sensitive systems, `Hoppdebaese` will not work.
 3. Restart the game or run `/reload`, then enable **Hoppdebäse** on the
    character-selection AddOns screen.
 
@@ -22,13 +22,15 @@ filling its progress bar, that exercise rests until the next day.
 - `/hopp help` opens details for controls, settings, and every exercise.
 - `/hopp progress` shows daily goal bars and all-time totals for every challenge.
 - `/hopp leaderboard` shows completed challenges and per-workout guild totals.
+- `/hopp top3` shows the top three guild contributors and total for each exercise.
 - `/hopp test` opens and animates a test challenge box.
 
 The responsive challenge box rolls quickly at first, slows substantially near
 the end of its four-second animation,
 and colors low amounts green through high amounts red. Every settled challenge
 is added to the persistent Todo window, which opens automatically after the roll.
-The translucent Todo panel can be resized and left open; its geometry is saved.
+The compact Todo panel contains only each icon, challenge, and completion action.
+It can be resized down to a small translucent list and left open; its geometry is saved.
 Complete challenges there to credit
 daily and all-time progress. **Replace Exercise (Session)** replaces the latest
 Todo entry and excludes that physical exercise until relogging. Open **Rested**
@@ -39,9 +41,19 @@ opens the complete in-addon reference.
 When all available exercises are complete or resting, future boxes offer only
 standing/stretching, hydration, and eye-rest prompts.
 
-Profession skill milestones at 10, 20, 30, and so on use only wellness breaks
-for primary professions, Cooking, Fishing, and First Aid. These include
+Profession skill milestones at 10, 20, 30, and so on mix wellness breaks with
+Easy exercises for primary professions, Cooking, Fishing, and First Aid. Breaks include
 **Stoßlüften**: open the window and walk around for 30 to 120 seconds.
+
+Settings provide a quest interval from 3 to 15 completed quests (default 10),
+separate roll/completion guild announcements, and equipment filters. Guild
+messages include the triggering event; completion messages end with a random
+Swiss-German line. Shower/face-wash prompts have a four-hour cooldown, and a
+special Swiss-German challenge has a one-percent roll chance.
+
+The minimap icon opens Todo with left-click, Settings with right-click, and the
+guild leaderboard with Shift-left-click. The guild leaderboard links to a second
+Top 3 view showing leaders and combined totals for every exercise.
 
 Pull-ups use dedicated ranges: Easy is always 1; Medium scales from 1-2 to 2-4;
 Hard scales from 2-3 to 4-5; Extreme is exactly double the corresponding Hard
@@ -54,7 +66,7 @@ character in `HoppdebaeseDB`.
 
 Addon version updates do not clear this data: WoW keeps SavedVariables separately
 from addon files, and new defaults only fill missing fields. Keep the
-`Hoppdebaese` folder name and `HoppdebaeseDB` SavedVariables key unchanged. This
+lowercase `hoppdebaese` folder name and `HoppdebaeseDB` SavedVariables key unchanged. This
 release also reads the older account-wide `GuildFitWheelDB` and migrates it when
 the current character has no existing progress.
 

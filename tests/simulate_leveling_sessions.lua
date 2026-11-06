@@ -10,6 +10,9 @@ local freshAirMinimum, freshAirMaximum = addonSource:match(
     'id = "freshAir".-values = { min = (%d+), max = (%d+) }.-fixedScale = true'
 )
 assert(tonumber(freshAirMinimum) == 30 and tonumber(freshAirMaximum) == 120, "Stoßlüften must remain 30-120 seconds")
+assert(addonSource:find('text = "Do the dishes if not done, else free"', 1, true), "Dishes challenge is missing")
+assert(addonSource:find('id = "deadHang"', 1, true), "Dead hang challenge is missing")
+assert(addonSource:find('cooldown = 14400', 1, true), "Shower cooldown is missing")
 for line in addonSource:gmatch("[^\n]+") do
     local id, name, unit = line:match('id = "([^"]+)".-name = "([^"]+)".-unit = "([^"]+)"')
     if id then challengeInfo[id] = { name = name, unit = unit } end
@@ -39,6 +42,7 @@ local professionSkills = {
     [3] = { name = "Cooking", rank = 29 },
     [4] = { name = "First Aid", rank = 39 },
 }
+local shiftDown = false
 
 local function shallowCopy(source)
     local copy = {}
@@ -95,6 +99,13 @@ local function createMock(kind, name, createdFrames, namedFrames)
     function methods:Disable() self.enabled = false end
     function methods:SetChecked(value) self.checked = value end
     function methods:GetChecked() return self.checked end
+    function methods:SetValue(value)
+        self.value = value
+        if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, value) end
+    end
+    function methods:GetValue() return self.value end
+    function methods:SetMinMaxValues(minimum, maximum) self.minimum, self.maximum = minimum, maximum end
+    function methods:RegisterForClicks(...) self.registeredClicks = { ... } end
     function methods:GetStringHeight()
         local _, lines = (self.text or ""):gsub("\n", "\n")
         return (lines + 1) * 14
@@ -117,6 +128,7 @@ end
 local function installWoWMocks(createdFrames, namedFrames)
     _G.unpack = _G.unpack or table.unpack
     _G.UIParent = createMock("UIParent", nil, {}, {})
+    _G.Minimap = createMock("Minimap", nil, {}, {})
     _G.BackdropTemplateMixin = nil
     _G.SlashCmdList = {}
     _G.C_ChatInfo = {
@@ -140,6 +152,7 @@ local function installWoWMocks(createdFrames, namedFrames)
     _G.Ambiguate = function(name) return name:match("^[^-]+") or name end
     _G.hooksecurefunc = function(_, callback) taxiHook = callback end
     _G.TakeTaxiNode = function() end
+    _G.IsShiftKeyDown = function() return shiftDown end
     _G.GetProfessions = function() return 1, nil, nil, 2, 3, 4 end
     _G.GetProfessionInfo = function(index)
         local profession = professionSkills[index]
@@ -423,15 +436,19 @@ end
 local pullupMain = pullupSession.named.HoppdebaeseBoxFrame
 local function assertPullupRange(difficulty, level, minimum, maximum, trigger)
     HoppdebaeseDB.difficulty = difficulty
-    for _ = 1, 25 do
+    local checked = 0
+    while checked < 25 do
         pullupSession.addon:ShowChallenge(trigger or "manual", level)
         for _ = 1, 100 do pullupMain.scripts.OnUpdate(pullupMain, 0.05) end
         local challenge = assert(pullupSession.addon.currentChallenge)
-        assert(challenge.id == "pullups", "Pull-up range test selected " .. challenge.id)
-        assert(challenge.amount >= minimum and challenge.amount <= maximum, string.format(
-            "%s level %d pull-ups outside %d-%d: %d",
-            difficulty, level, minimum, maximum, challenge.amount
-        ))
+        if challenge.id ~= "elephant" then
+            assert(challenge.id == "pullups", "Pull-up range test selected " .. challenge.id)
+            assert(challenge.amount >= minimum and challenge.amount <= maximum, string.format(
+                "%s level %d pull-ups outside %d-%d: %d",
+                difficulty, level, minimum, maximum, challenge.amount
+            ))
+            checked = checked + 1
+        end
         HoppdebaeseDB.todo = {}
     end
 end
@@ -452,6 +469,18 @@ assertPullupRange("extreme", 60, 8, 10)
 savedDB = nil
 simulatedLevel = 20
 local distributionSession = startSession("2026-11-07", 404, "medium")
+local minimapButton = assert(distributionSession.named.HoppdebaeseMinimapButton, "Minimap button was not created")
+distributionSession.named.HoppdebaeseTodo:Hide()
+minimapButton.scripts.OnClick(minimapButton, "LeftButton")
+assert(distributionSession.named.HoppdebaeseTodo:IsShown(), "Minimap left-click did not open Todo")
+shiftDown = true
+minimapButton.scripts.OnClick(minimapButton, "LeftButton")
+assert(distributionSession.named.HoppdebaeseLeaderboard:IsShown(), "Minimap shift-left-click did not open leaderboard")
+shiftDown = false
+minimapButton.scripts.OnClick(minimapButton, "RightButton")
+assert(distributionSession.named.HoppdebaeseSettings:IsShown(), "Minimap right-click did not open Settings")
+distributionSession.named.HoppdebaeseLeaderboard:Hide()
+distributionSession.named.HoppdebaeseSettings:Hide()
 distributionSession.help.scripts.OnClick(distributionSession.help)
 assert(distributionSession.named.HoppdebaeseHelp:IsShown(), "Help button did not open the reference window")
 distributionSession.named.HoppdebaeseHelp:Hide()
@@ -475,26 +504,42 @@ local legacySelfEntry = {
     completionCounts = { squats = 99 },
 }
 HoppdebaeseDB.guildStats[selfEchoKey] = legacySelfEntry
+HoppdebaeseDB.stats.squats = 10
+HoppdebaeseDB.guildStats["Otherhero-Testrealm"] = {
+    difficulty = "medium",
+    completedChallenges = 2,
+    stats = { squats = 20 },
+    completionCounts = { squats = 2 },
+}
 distributionSession.named.HoppdebaeseLeaderboard:Show()
 local leaderboardText = distributionSession.addon.leaderboardText.text
 local _, playerRows = leaderboardText:gsub("Testhero", "")
 assert(playerRows == 1, "Leaderboard rendered the local player more than once")
 assert(HoppdebaeseDB.guildStats[selfEchoKey] == legacySelfEntry, "Legacy self entry was modified or deleted")
 distributionSession.named.HoppdebaeseLeaderboard:Hide()
+distributionSession.named.HoppdebaeseExerciseLeaderboard:Show()
+local exerciseLeaderboardText = distributionSession.addon.exerciseLeaderboardText.text
+assert(exerciseLeaderboardText:find("Total: 30 reps", 1, true), "Exercise leaderboard total is incorrect")
+assert(exerciseLeaderboardText:find("Otherhero", 1, true), "Exercise leaderboard omitted a top contributor")
+distributionSession.named.HoppdebaeseExerciseLeaderboard:Hide()
 
 local distributionTotal = 2000
 local stapleHits = 0
+local rareHits = 0
 local stapleCounts = { squats = 0, situps = 0, pushups = 0 }
 local mainFrame = assert(distributionSession.named.HoppdebaeseBoxFrame)
 local todoFrame = assert(distributionSession.named.HoppdebaeseTodo)
-assert(todoFrame.backdropColor and todoFrame.backdropColor[4] == 0.78, "Todo backdrop is not translucent")
+assert(todoFrame.backdropColor and todoFrame.backdropColor[4] == 0.38, "Todo backdrop is not sufficiently translucent")
+todoFrame:SetSize(240, 110)
+todoFrame.scripts.OnSizeChanged(todoFrame)
+assert(distributionSession.addon.todoContent:GetWidth() >= 205, "Compact Todo layout became too narrow")
 local originalTodoWidth = distributionSession.addon.todoContent:GetWidth()
 todoFrame:SetSize(700, 520)
 todoFrame.scripts.OnSizeChanged(todoFrame)
 assert(distributionSession.addon.todoContent:GetWidth() > originalTodoWidth, "Todo content did not follow window resize")
 assert(HoppdebaeseDB.todoWindow.width == 700 and HoppdebaeseDB.todoWindow.height == 520, "Todo size was not saved")
 
--- Primary and secondary profession slots trigger wellness-only rolls at multiples of ten.
+-- Primary and secondary profession slots trigger the mixed Easy pool at multiples of ten.
 for index, expectedName in ipairs({ "Alchemy", "Fishing", "Cooking", "First Aid" }) do
     professionSkills[index].rank = professionSkills[index].rank + 1
     mainFrame:Hide()
@@ -503,7 +548,6 @@ for index, expectedName in ipairs({ "Alchemy", "Fishing", "Cooking", "First Aid"
     assert(mainFrame:IsShown(), expectedName .. " milestone did not open a challenge")
     assert(distributionSession.addon.titleText.text == expectedName .. " Skill " .. professionSkills[index].rank)
     for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
-    assert(not dailyGoals[distributionSession.addon.currentChallenge.id], expectedName .. " selected a physical exercise")
     assert(todoFrame:IsShown(), expectedName .. " milestone did not open Todo")
     HoppdebaeseDB.todo = {}
 end
@@ -511,6 +555,18 @@ professionSkills[1].rank = 11
 mainFrame:Hide()
 distributionSession.addon.scripts.OnEvent(distributionSession.addon, "SKILL_LINES_CHANGED")
 assert(not mainFrame:IsShown(), "Non-multiple profession skill opened a challenge")
+
+local sawProfessionExercise, sawProfessionWellness = false, false
+for _ = 1, 200 do
+    distributionSession.addon:ShowChallenge("profession")
+    for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+    local id = distributionSession.addon.currentChallenge.id
+    if dailyGoals[id] then sawProfessionExercise = true else sawProfessionWellness = true end
+    HoppdebaeseDB.todo = {}
+    if sawProfessionExercise and sawProfessionWellness then break end
+end
+assert(sawProfessionExercise and sawProfessionWellness, "Profession pool did not mix exercises and wellness challenges")
+
 for _ = 1, distributionTotal do
     distributionSession.addon:ShowChallenge("manual")
     for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
@@ -520,12 +576,14 @@ for _ = 1, distributionTotal do
         stapleCounts[id] = stapleCounts[id] + 1
         stapleHits = stapleHits + 1
     end
+    if id == "elephant" then rareHits = rareHits + 1 end
     HoppdebaeseDB.todo = {}
 end
 
 local stapleShare = stapleHits / distributionTotal
 assert(stapleShare > 0.24, string.format("Weighted staple share too low: %.1f%%", stapleShare * 100))
 assert(stapleShare < 0.35, string.format("Weighted staple share too high: %.1f%%", stapleShare * 100))
+assert(rareHits >= 5 and rareHits <= 40, "Rare challenge did not stay near one percent: " .. rareHits)
 print("\nWeighted selection over " .. distributionTotal .. " unchanged-pool rolls:")
 print(string.format(
     "    Squats: %d  |  Sit-ups: %d  |  Push-ups: %d  |  Combined: %.1f%%",
@@ -627,16 +685,38 @@ for _ = 1, 10 do distributionSession.addon.scripts.OnEvent(distributionSession.a
 assert(HoppdebaeseDB.questsCompleted == 20, "Quest counter did not continue while disabled")
 assert(not mainFrame:IsShown(), "Disabled quest trigger opened the box")
 
+HoppdebaeseDB.triggers.quests = true
+HoppdebaeseDB.questsCompleted = 0
+distributionSession.addon.questSlider.scripts.OnValueChanged(distributionSession.addon.questSlider, 3)
+for _ = 1, 2 do distributionSession.addon.scripts.OnEvent(distributionSession.addon, "QUEST_TURNED_IN") end
+assert(not mainFrame:IsShown(), "Adjustable quest trigger opened too early")
+distributionSession.addon.scripts.OnEvent(distributionSession.addon, "QUEST_TURNED_IN")
+assert(mainFrame:IsShown(), "Adjusted three-quest trigger did not open")
+for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+mainFrame:Hide()
+
 -- Guild announcements occur once for a selected center item and respect the toggle.
 _G.IsInGuild = function() return true end
 guildMessages = {}
+HoppdebaeseDB.todo = {}
 HoppdebaeseDB.announceGuild = true
 distributionSession.addon:ShowChallenge("manual")
 for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 assert(#guildMessages == 1 and guildMessages[1].channel == "GUILD", "Guild announcement missing")
+assert(guildMessages[1].message:find("from Workout Challenge", 1, true), "Roll announcement omitted its event")
 HoppdebaeseDB.announceGuild = false
 distributionSession.addon:ShowChallenge("manual")
 for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
 assert(#guildMessages == 1, "Disabled guild announcements still sent a message")
+
+HoppdebaeseDB.announceCompletion = true
+local completionButton = findButton(distributionSession.frames, "Complete")
+completionButton.scripts.OnClick(completionButton)
+assert(#guildMessages == 2, "Completion announcement missing")
+assert(guildMessages[2].message:find("completed from", 1, true), "Completion announcement omitted its event")
+HoppdebaeseDB.announceCompletion = false
+completionButton = findButton(distributionSession.frames, "Complete")
+completionButton.scripts.OnClick(completionButton)
+assert(#guildMessages == 2, "Disabled completion announcements still sent a message")
 
 print("ALL_DIFFICULTIES_SIMULATION_PASS")
