@@ -514,11 +514,12 @@ local function IsCurrentPlayer(name)
     local normalizedName = NormalizeCharacterName(name)
     if normalizedName == NormalizeCharacterName(GetPlayerName()) then return true end
 
-    -- Same-realm addon senders may omit the realm entirely.
-    if not normalizedName:find("-", 1, true) then
-        return normalizedName == NormalizeCharacterName(UnitName("player"))
-    end
-    return false
+    -- Cached addon messages can retain an old or differently formatted realm.
+    -- Character names are unique enough for this display-only self filter, and
+    -- no stored profile is removed or rewritten.
+    local candidateCharacter = normalizedName:match("^([^-]+)") or normalizedName
+    local playerCharacter = NormalizeCharacterName(UnitName("player")):match("^([^-]+)")
+    return candidateCharacter ~= "" and candidateCharacter == playerCharacter
 end
 
 local function SendGuildMessage(message)
@@ -1113,15 +1114,23 @@ local function BuildLeaderboardText()
     local lines = {}
     for rank, profile in ipairs(participants) do
         local difficulty = DIFFICULTIES[profile.difficulty] or DIFFICULTIES.medium
-        local playerSuffix = profile.isPlayer and " |cff61f2ad(you)|r" or ""
-        table.insert(lines, string.format(
-            "|cffffc74d%d.|r |cffffffff%s|r%s  -  %d challenges  [%s]",
-            rank,
-            GetShortName(profile.name),
-            playerSuffix,
-            profile.completedChallenges,
-            difficulty.label
-        ))
+        if profile.isPlayer then
+            table.insert(lines, string.format(
+                "|cff61f2ad>> %d. %s (YOU) - %d challenges [%s] <<|r",
+                rank,
+                GetShortName(profile.name),
+                profile.completedChallenges,
+                difficulty.label
+            ))
+        else
+            table.insert(lines, string.format(
+                "|cffffc74d%d.|r |cffffffff%s|r  -  %d challenges  [%s]",
+                rank,
+                GetShortName(profile.name),
+                profile.completedChallenges,
+                difficulty.label
+            ))
+        end
 
         local totals = {}
         for _, challenge in ipairs(ALL_CHALLENGES) do
@@ -1254,15 +1263,23 @@ local function BuildExerciseLeaderboardText()
         else
             for rank = 1, math.min(3, #leaders) do
                 local leader = leaders[rank]
-                local suffix = leader.isPlayer and " |cff61f2ad(you)|r" or ""
-                table.insert(lines, string.format(
-                    "  %d. %s%s - %d %s",
-                    rank,
-                    GetShortName(leader.name),
-                    suffix,
-                    leader.amount,
-                    exercise.unit
-                ))
+                if leader.isPlayer then
+                    table.insert(lines, string.format(
+                        "|cff61f2ad  >> %d. %s (YOU) - %d %s <<|r",
+                        rank,
+                        GetShortName(leader.name),
+                        leader.amount,
+                        exercise.unit
+                    ))
+                else
+                    table.insert(lines, string.format(
+                        "  %d. %s - %d %s",
+                        rank,
+                        GetShortName(leader.name),
+                        leader.amount,
+                        exercise.unit
+                    ))
+                end
             end
         end
         table.insert(lines, " ")

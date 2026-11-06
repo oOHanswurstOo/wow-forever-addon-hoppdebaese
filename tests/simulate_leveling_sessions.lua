@@ -487,7 +487,7 @@ distributionSession.named.HoppdebaeseHelp:Hide()
 
 -- Guild addon messages can echo back with a differently formatted realm. They
 -- must not create a second local-player row or alter old saved entries.
-local selfEchoKey = "Testhero-Test realm"
+local selfEchoKey = "Testhero-OldOtherRealm"
 distributionSession.addon.scripts.OnEvent(
     distributionSession.addon,
     "CHAT_MSG_ADDON",
@@ -515,12 +515,15 @@ distributionSession.named.HoppdebaeseLeaderboard:Show()
 local leaderboardText = distributionSession.addon.leaderboardText.text
 local _, playerRows = leaderboardText:gsub("Testhero", "")
 assert(playerRows == 1, "Leaderboard rendered the local player more than once")
+assert(leaderboardText:find(">> ", 1, true) and leaderboardText:find("(YOU)", 1, true), "Local leaderboard row is not highlighted")
 assert(HoppdebaeseDB.guildStats[selfEchoKey] == legacySelfEntry, "Legacy self entry was modified or deleted")
 distributionSession.named.HoppdebaeseLeaderboard:Hide()
 distributionSession.named.HoppdebaeseExerciseLeaderboard:Show()
 local exerciseLeaderboardText = distributionSession.addon.exerciseLeaderboardText.text
 assert(exerciseLeaderboardText:find("Total: 30 reps", 1, true), "Exercise leaderboard total is incorrect")
 assert(exerciseLeaderboardText:find("Otherhero", 1, true), "Exercise leaderboard omitted a top contributor")
+assert(exerciseLeaderboardText:find("(YOU)", 1, true), "Local exercise standing is not highlighted")
+assert(HoppdebaeseDB.guildStats[selfEchoKey] == legacySelfEntry, "Exercise leaderboard modified legacy self data")
 distributionSession.named.HoppdebaeseExerciseLeaderboard:Hide()
 
 local distributionTotal = 2000
