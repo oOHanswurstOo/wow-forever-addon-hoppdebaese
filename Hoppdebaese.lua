@@ -32,6 +32,7 @@ local DEFAULTS = {
         dungeon = true,
         quests = true,
         professions = true,
+        cats = true,
     },
     tools = {
         bench = false,
@@ -90,7 +91,8 @@ local EXERCISES = {
     { id = "jumpingJacks", code = "jj", name = "Jumping jacks", label = "%d jumping jacks", value = "counts", unit = "reps", icon = ICONS.cardio },
     { id = "plank", code = "pl", name = "Plank", label = "%d sec plank", value = "seconds", unit = "sec", icon = ICONS.hold },
     { id = "reverseLunges", code = "rl", name = "Reverse lunges", label = "%d reverse lunges", value = "counts", unit = "reps", icon = ICONS.legs },
-    { id = "calfRaises", code = "cr", name = "Calf raises", label = "%d calf raises", value = "counts", unit = "reps", amountMultiplier = 1.2, icon = ICONS.legs },
+    { id = "lunges", code = "lu", name = "Lunges", label = "%d forward lunges", value = "counts", unit = "reps", icon = ICONS.legs },
+    { id = "calfRaises", code = "cr", name = "Calf raises", label = "%d calf raises", value = "counts", unit = "reps", amountMultiplier = 1.35, icon = ICONS.legs },
     { id = "gluteBridges", code = "gb", name = "Glute bridges", label = "%d glute bridges", value = "counts", unit = "reps", icon = ICONS.balance },
     { id = "birdDogs", code = "bd", name = "Bird-dogs", label = "%d bird-dogs", value = "counts", unit = "reps", icon = ICONS.balance },
     { id = "mountainClimbers", code = "mc", name = "Mountain climbers", label = "%d mountain climbers", value = "counts", unit = "reps", icon = ICONS.cardio },
@@ -130,6 +132,11 @@ local EASY_CHALLENGES = {
     { id = "elephant", code = "el", name = "Rüssel strichle", text = "Gang di Rüssel go strichle", amount = 1, unit = "times", rareChance = 0.01, icon = ICONS.recovery },
 }
 
+local CAT_CHALLENGES = {
+    { id = "catPlay", code = "ct", name = "Play with cats", label = "Play with your cats for %d minutes", values = { min = 5, max = 20 }, fixedScale = true, higherIsBetter = true, unit = "min", weight = 1.2, icon = "Interface\\Icons\\INV_Box_PetCarrier_01" },
+    { id = "catPets", code = "pt", name = "Cat pets", label = "Give each cat %d pets", values = { min = 10, max = 30 }, fixedScale = true, unit = "pets", weight = 1.2, icon = "Interface\\Icons\\INV_Box_PetCarrier_01" },
+}
+
 local CHALLENGE_DESCRIPTIONS = {
     squats = "Lower-body squat repetitions for legs and hips.",
     situps = "Floor sit-ups for the abdominal muscles.",
@@ -138,6 +145,7 @@ local CHALLENGE_DESCRIPTIONS = {
     jumpingJacks = "Full-body jumping jacks to raise your heart rate.",
     plank = "Hold a straight forearm or high-plank position.",
     reverseLunges = "Step backward into alternating lunges; the amount is total repetitions.",
+    lunges = "Step forward into alternating lunges; the amount is total repetitions.",
     calfRaises = "Rise onto your toes and lower with control.",
     gluteBridges = "Lift your hips from the floor while keeping your upper back planted.",
     birdDogs = "From hands and knees, extend opposite arm and leg; count both sides.",
@@ -165,6 +173,8 @@ local CHALLENGE_DESCRIPTIONS = {
     freshAir = "Open the window fully and walk around while airing the room.",
     dishes = "Do the dishes if they are waiting; otherwise this challenge is free.",
     elephant = "A rare one-percent Swiss-German surprise challenge.",
+    catPlay = "Spend the displayed number of minutes actively playing with your cats.",
+    catPets = "Give every cat the displayed number of gentle pets.",
 }
 
 local TRIGGER_INFO = {
@@ -185,24 +195,34 @@ local DIFFICULTIES = {
 }
 
 local COMPLETION_QUOTES = {
-    "Geili Sach",
-    "Looksmaxxer",
-    "Mr. Maschine over head",
-    "Au im IRL gits es Level up lol",
-    "Starch gmacht",
-    "Maschine!",
-    "Du bisch am grinde",
-    "Nöd schlecht, hä",
-    "Witer so",
-    "Level up im echte Läbe",
-    "Stabil abgliferet",
-    "Das git Gains",
-    "Hopp, dä nächsti",
-    "Suuberi Sach",
-    "Du ziehsch dure",
-    "Fitness-Skill erhöht",
-    "Ehrenmensch",
-    "Chli besser als geschter",
+    "W im Chat, dä Körper het delivered",
+    "POGGERS, Muskel-Skill +1",
+    "Chat, isch das legal so stabil?",
+    "KEKW, sogar dä Stuehl isch beeindruckt",
+    "No cap, du bisch e Maschine",
+    "Rare IRL Achievement unlocked",
+    "Gains diff, Gegner deinstalliert",
+    "Sigma Grindset, aber mit Wasserpause",
+    "Bro het würkli d Quest gmacht",
+    "NPCs händ applaudiert (Quelle: vertrau mir)",
+    "Fitness RNG het grad crittet",
+    "GG EZ, jetzt nöd grad umgheie",
+    "Dä Schweiss isch nur Liquid XP",
+    "Massive W, absolut bodenlos",
+    "Main-Character-Arc erfolgreich fortgsetzt",
+    "Touch Grass Buff aktiviert",
+    "Certified Büez-Moment",
+    "Dä innere Schweinehund isch AFK",
+    "Skill issue erfolgreich behobe",
+    "Streamer-Modus: komplett am eskaliere",
+    "Meme-Potential: 100, Form: hoffentlich au",
+    "Hopp Schwiiz, aber vor allem hopp du",
+    "Es isch nöd viel, aber es isch ehrlechi Büez",
+    "Muskle säged danke, morn sägeds aua",
+    "Plot Twist: Du hesch es tatsächlich gmacht",
+    "Absoluti Maschine, Garantie leider abgloffe",
+    "Chat spammt W, Nachbere spammed Muskelkater",
+    "Level 60 Körper incoming, trust the process",
 }
 
 -- Goals cap how much of one movement can be assigned in a calendar day. They
@@ -216,6 +236,7 @@ local DAILY_GOALS = {
     jumpingJacks = { easy = 30, medium = 50, hard = 75, extreme = 150 },
     plank = { easy = 50, medium = 75, hard = 110, extreme = 220 },
     reverseLunges = { easy = 20, medium = 30, hard = 45, extreme = 90 },
+    lunges = { easy = 20, medium = 30, hard = 45, extreme = 90 },
     calfRaises = { easy = 30, medium = 50, hard = 75, extreme = 150 },
     gluteBridges = { easy = 24, medium = 40, hard = 60, extreme = 120 },
     birdDogs = { easy = 20, medium = 30, hard = 45, extreme = 90 },
@@ -259,6 +280,7 @@ local CHALLENGE_BY_ID = {}
 local ALL_CHALLENGES = {}
 for _, challenge in ipairs(EXERCISES) do table.insert(ALL_CHALLENGES, challenge) end
 for _, challenge in ipairs(EASY_CHALLENGES) do table.insert(ALL_CHALLENGES, challenge) end
+for _, challenge in ipairs(CAT_CHALLENGES) do table.insert(ALL_CHALLENGES, challenge) end
 for _, challenge in ipairs(ALL_CHALLENGES) do
     CHALLENGE_BY_CODE[challenge.code] = challenge
     CHALLENGE_BY_ID[challenge.id] = challenge
@@ -428,6 +450,7 @@ local function BuildChallenge(exercise, tier, multiplier, difficultyKey, level)
         unit = exercise.unit,
         icon = exercise.icon,
         valueRatio = math.max(0, math.min(1, valueRatio)),
+        higherIsBetter = exercise.higherIsBetter,
     }
 end
 
@@ -466,6 +489,12 @@ local function RollChallenge(triggerKey, excludedID)
         if exercise.id ~= excludedID and IsExerciseAvailable(exercise) then
             table.insert(pool, exercise)
             workoutCount = workoutCount + 1
+        end
+    end
+
+    if HoppdebaeseDB.triggers.cats then
+        for _, challenge in ipairs(CAT_CHALLENGES) do
+            if challenge.id ~= excludedID and IsPromptAvailable(challenge) then table.insert(pool, challenge) end
         end
     end
 
@@ -764,7 +793,7 @@ local function SetBoxRowColor(row, challenge, selected)
         return
     end
 
-    local ratio = challenge.valueRatio
+    local ratio = challenge.higherIsBetter and (1 - challenge.valueRatio) or challenge.valueRatio
     local red, green, blue
     if ratio <= 0.5 then
         local blend = ratio * 2
@@ -1642,6 +1671,7 @@ local function BuildHelpText()
         "|cffffffffDungeon completion|r - Rolls for supported dungeon-completion events with a 1.2x multiplier.",
         "|cffffffffQuest interval|r - Choose a challenge every 3 to 15 completed quests; the default is 10.",
         "|cffffffffEvery 10 profession skill points|r - Rolls from a mix of wellness breaks and Easy exercises for all profession slots.",
+        "|cffffffffCats|r - Adds cat play and petting prompts to every difficulty at 1.2x selection weight.",
         "|cffffffffRoll announcement|r - Posts the selected challenge and originating event to guild chat.",
         "|cffffffffCompletion announcement|r - Posts the completed challenge, event, and a random Swiss-German message.",
         "|cffffffffWorkout bench|r - Enables bench presses and helps unlock seated shoulder presses.",
@@ -1894,6 +1924,7 @@ local function CreateSettingsWindow()
         { key = "dungeon", text = "Dungeon completion" },
         { key = "quests", text = "Quest completion interval" },
         { key = "professions", text = "Every 10 profession skill points" },
+        { key = "cats", text = "Cats (include cat challenges)" },
     }
     for index, info in ipairs(triggers) do
         local triggerKey = info.key
@@ -1903,7 +1934,7 @@ local function CreateSettingsWindow()
     end
 
     local questSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
-    questSlider:SetPoint("TOPLEFT", 42, -316)
+    questSlider:SetPoint("TOPLEFT", 42, -346)
     questSlider:SetSize(250, 18)
     questSlider:SetMinMaxValues(3, 15)
     questSlider:SetValueStep(1)
@@ -1924,24 +1955,24 @@ local function CreateSettingsWindow()
     addon.questSlider = questSlider
 
     local sharingTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    sharingTitle:SetPoint("TOPLEFT", 24, -360)
+    sharingTitle:SetPoint("TOPLEFT", 24, -390)
     sharingTitle:SetText("Sharing")
 
-    CreateCheckButton(frame, "Announce rolled challenge in guild chat", 22, -374,
+    CreateCheckButton(frame, "Announce rolled challenge in guild chat", 22, -404,
         function() return HoppdebaeseDB.announceGuild end,
         function(value) HoppdebaeseDB.announceGuild = value end)
 
-    CreateCheckButton(frame, "Announce completed challenge in guild chat", 22, -404,
+    CreateCheckButton(frame, "Announce completed challenge in guild chat", 22, -434,
         function() return HoppdebaeseDB.announceCompletion end,
         function(value) HoppdebaeseDB.announceCompletion = value end)
 
     local toolsTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    toolsTitle:SetPoint("TOPLEFT", 24, -446)
+    toolsTitle:SetPoint("TOPLEFT", 24, -476)
     toolsTitle:SetText("Equipment available at home")
 
     for index, info in ipairs(TOOL_LABELS) do
         local toolKey = info.key
-        CreateCheckButton(frame, info.text, 22, -460 - ((index - 1) * 30),
+        CreateCheckButton(frame, info.text, 22, -490 - ((index - 1) * 30),
             function() return HoppdebaeseDB.tools[toolKey] end,
             function(value) HoppdebaeseDB.tools[toolKey] = value end)
     end

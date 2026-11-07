@@ -13,6 +13,18 @@ assert(tonumber(freshAirMinimum) == 30 and tonumber(freshAirMaximum) == 120, "St
 assert(addonSource:find('text = "Do the dishes if not done, else free"', 1, true), "Dishes challenge is missing")
 assert(addonSource:find('id = "deadHang"', 1, true), "Dead hang challenge is missing")
 assert(addonSource:find('cooldown = 14400', 1, true), "Shower cooldown is missing")
+assert(addonSource:find('id = "lunges", code = "lu"', 1, true), "Forward lunges challenge is missing")
+assert(addonSource:find('id = "calfRaises"', 1, true) and addonSource:find('amountMultiplier = 1.35', 1, true), "Calf-raise values were not increased")
+assert(addonSource:find('id = "catPlay"', 1, true) and addonSource:find('id = "catPets"', 1, true), "Cat challenges are missing")
+assert(addonSource:find('values = { min = 5, max = 20 }, fixedScale = true, higherIsBetter = true', 1, true), "Cat play must use a 5-20 minute higher-is-better range")
+local catChallengeBlock = assert(addonSource:match("local CAT_CHALLENGES = {(.-)\n}"), "Cat challenge pool is missing")
+local catWeightCount = 0
+for _ in catChallengeBlock:gmatch("weight = 1%.2") do catWeightCount = catWeightCount + 1 end
+assert(catWeightCount == 2, "Both cat challenges must use 1.2 selection weight")
+local completionQuoteBlock = assert(addonSource:match("local COMPLETION_QUOTES = {(.-)\n}"), "Completion quotes are missing")
+local completionQuoteCount = 0
+for _ in completionQuoteBlock:gmatch('\n%s*"') do completionQuoteCount = completionQuoteCount + 1 end
+assert(completionQuoteCount == 28, "Completion quote pool must contain 28 messages")
 for line in addonSource:gmatch("[^\n]+") do
     local id, name, unit = line:match('id = "([^"]+)".-name = "([^"]+)".-unit = "([^"]+)"')
     if id then challengeInfo[id] = { name = name, unit = unit } end
@@ -430,6 +442,7 @@ savedDB = nil
 simulatedLevel = 60
 local pullupSession = startSession("2026-11-07", 403, "medium")
 HoppdebaeseDB.tools.pullupBar = true
+HoppdebaeseDB.triggers.cats = false
 for id in pairs(dailyGoals) do
     if id ~= "pullups" then pullupSession.addon.sessionDisabled[id] = true end
 end
@@ -463,12 +476,14 @@ assertPullupRange("hard", 60, 4, 5)
 assertPullupRange("extreme", 20, 4, 6)
 assertPullupRange("extreme", 40, 6, 8)
 assertPullupRange("extreme", 60, 8, 10)
+HoppdebaeseDB.triggers.cats = true
 
 -- Daily caps intentionally alter long sessions, so test the raw selection weight
 -- separately without completing challenges or changing the available pool.
 savedDB = nil
 simulatedLevel = 20
 local distributionSession = startSession("2026-11-07", 404, "medium")
+assert(HoppdebaeseDB.triggers.cats == true, "Cats setting was not enabled by default")
 local minimapButton = assert(distributionSession.named.HoppdebaeseMinimapButton, "Minimap button was not created")
 distributionSession.named.HoppdebaeseTodo:Hide()
 minimapButton.scripts.OnClick(minimapButton, "LeftButton")
@@ -543,6 +558,7 @@ local distributionTotal = 2000
 local stapleHits = 0
 local rareHits = 0
 local stapleCounts = { squats = 0, situps = 0, pushups = 0 }
+local catCounts = { catPlay = 0, catPets = 0 }
 local mainFrame = assert(distributionSession.named.HoppdebaeseBoxFrame)
 local todoFrame = assert(distributionSession.named.HoppdebaeseTodo)
 assert(todoFrame.backdropColor and todoFrame.backdropColor[4] == 0.38, "Todo backdrop is not sufficiently translucent")
@@ -592,6 +608,7 @@ for _ = 1, distributionTotal do
         stapleCounts[id] = stapleCounts[id] + 1
         stapleHits = stapleHits + 1
     end
+    if catCounts[id] then catCounts[id] = catCounts[id] + 1 end
     if id == "elephant" then rareHits = rareHits + 1 end
     HoppdebaeseDB.todo = {}
 end
@@ -600,6 +617,17 @@ local stapleShare = stapleHits / distributionTotal
 assert(stapleShare > 0.24, string.format("Weighted staple share too low: %.1f%%", stapleShare * 100))
 assert(stapleShare < 0.35, string.format("Weighted staple share too high: %.1f%%", stapleShare * 100))
 assert(rareHits >= 5 and rareHits <= 40, "Rare challenge did not stay near one percent: " .. rareHits)
+assert(catCounts.catPlay > 0 and catCounts.catPets > 0, "Enabled cat challenges did not enter the wheel")
+
+HoppdebaeseDB.triggers.cats = false
+for _ = 1, 100 do
+    distributionSession.addon:ShowChallenge("manual")
+    for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+    local challengeID = distributionSession.addon.currentChallenge.id
+    assert(not catCounts[challengeID], "Disabled cat challenge entered the wheel")
+    HoppdebaeseDB.todo = {}
+end
+HoppdebaeseDB.triggers.cats = true
 print("\nWeighted selection over " .. distributionTotal .. " unchanged-pool rolls:")
 print(string.format(
     "    Squats: %d  |  Sit-ups: %d  |  Push-ups: %d  |  Combined: %.1f%%",
@@ -650,20 +678,26 @@ assert(distributionSession.addon.boxVisual:GetWidth() > originalBoxWidth, "Box w
 assert(distributionSession.addon.boxRows[1]:GetHeight() > 40, "Box rows did not grow with window height")
 
 local sawGreen, sawRed = false, false
-for _ = 1, 300 do
+local sawCatLowRed, sawCatHighGreen = false, false
+for _ = 1, 1000 do
     distributionSession.addon:ShowChallenge("manual")
     for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
     local challenge = distributionSession.addon.currentChallenge
     local color = distributionSession.addon.boxRows[3].background.vertexColor
-    if challenge.valueRatio and challenge.valueRatio <= 0.15 then
+    if challenge.id == "catPlay" and challenge.valueRatio <= 0.15 then
+        sawCatLowRed = color[1] > color[2]
+    elseif challenge.id == "catPlay" and challenge.valueRatio >= 0.85 then
+        sawCatHighGreen = color[2] > color[1]
+    elseif challenge.valueRatio and not challenge.higherIsBetter and challenge.valueRatio <= 0.15 then
         sawGreen = color[2] > color[1]
-    elseif challenge.valueRatio and challenge.valueRatio >= 0.85 then
+    elseif challenge.valueRatio and not challenge.higherIsBetter and challenge.valueRatio >= 0.85 then
         sawRed = color[1] > color[2]
     end
     HoppdebaeseDB.todo = {}
-    if sawGreen and sawRed then break end
+    if sawGreen and sawRed and sawCatLowRed and sawCatHighGreen then break end
 end
 assert(sawGreen and sawRed, "Low/high challenge values did not render green/red")
+assert(sawCatLowRed and sawCatHighGreen, "Cat play did not render minimum red and maximum green")
 
 -- A pending Todo survives an addon reload and can only be completed there.
 distributionSession.addon:ShowChallenge("manual")

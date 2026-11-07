@@ -46,10 +46,16 @@ Easy exercises for primary professions, Cooking, Fishing, and First Aid. Breaks 
 **Stoßlüften**: open the window and walk around for 30 to 120 seconds.
 
 Settings provide a quest interval from 3 to 15 completed quests (default 10),
-separate roll/completion guild announcements, and equipment filters. Guild
+separate roll/completion guild announcements, and equipment filters. The
+enabled-by-default **Cats** setting adds "play with your cats" and "give each
+cat pets" prompts to every difficulty wheel at a 1.2 selection weight. Cat play
+runs from 5 to 20 minutes; shorter rolls are red and longer rolls are green. Guild
 messages include the triggering event; completion messages end with a random
-Swiss-German line. Shower/face-wash prompts have a four-hour cooldown, and a
+Swiss-German/Twitch-chat line. Shower/face-wash prompts have a four-hour cooldown, and a
 special Swiss-German challenge has a one-percent roll chance.
+
+The exercise pool includes both forward and reverse lunges. Calf raises use a
+slightly higher amount scale than standard repetition exercises.
 
 The minimap icon opens Todo with left-click, Settings with right-click, and the
 guild leaderboard with Shift-left-click. The guild leaderboard links to a second
