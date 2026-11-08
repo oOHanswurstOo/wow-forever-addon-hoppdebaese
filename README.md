@@ -38,6 +38,16 @@ to view excluded exercises and restore any of them immediately. **Minimize**
 hides the roll window while leaving its Todo entry available. The **?** button
 opens the complete in-addon reference.
 
+Every addon window has a **Reset Window** button that restores only its original
+size and position. It does not reset settings, Todo entries, tokens, daily
+progress, all-time totals, or guild data.
+
+Completing a physical exercise rolled within the top 10% of its maximum value
+awards one persistent **Fuultier token**. Three tokens can skip one physical exercise from
+Todo without crediting its amount or completion. Cat and wellness challenges
+never award tokens and never show the token Skip action. Token totals are shown
+in both Todo and Settings.
+
 When all available exercises are complete or resting, future boxes offer only
 standing/stretching, hydration, and eye-rest prompts.
 

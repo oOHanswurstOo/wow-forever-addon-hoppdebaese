@@ -24,7 +24,13 @@ assert(catWeightCount == 2, "Both cat challenges must use 1.2 selection weight")
 local completionQuoteBlock = assert(addonSource:match("local COMPLETION_QUOTES = {(.-)\n}"), "Completion quotes are missing")
 local completionQuoteCount = 0
 for _ in completionQuoteBlock:gmatch('\n%s*"') do completionQuoteCount = completionQuoteCount + 1 end
-assert(completionQuoteCount == 28, "Completion quote pool must contain 28 messages")
+assert(completionQuoteCount == 68, "Completion quote pool must contain 68 messages")
+for _, name in ipairs({ "Obama", "Gandhi", "Richi", "Sam Altman" }) do
+    assert(completionQuoteBlock:find(name, 1, true), name .. " completion quote is missing")
+end
+for _, phrase in ipairs({ "Früener hämmer", "OMEGALUL", "6 7 Reps", "Gopferdammi" }) do
+    assert(completionQuoteBlock:find(phrase, 1, true), phrase .. " quote style is missing")
+end
 for line in addonSource:gmatch("[^\n]+") do
     local id, name, unit = line:match('id = "([^"]+)".-name = "([^"]+)".-unit = "([^"]+)"')
     if id then challengeInfo[id] = { name = name, unit = unit } end
@@ -478,6 +484,78 @@ assertPullupRange("extreme", 40, 6, 8)
 assertPullupRange("extreme", 60, 8, 10)
 HoppdebaeseDB.triggers.cats = true
 
+-- Fuultier tokens are earned only after completing physical exercises in the top ten percent.
+savedDB = nil
+simulatedLevel = 20
+local tokenSession = startSession("2026-11-07", 406, "medium")
+local tokenMain = tokenSession.named.HoppdebaeseBoxFrame
+HoppdebaeseDB.triggers.cats = false
+for id in pairs(dailyGoals) do
+    if id ~= "squats" then tokenSession.addon.sessionDisabled[id] = true end
+end
+local sawQualifyingExercise, sawNonQualifyingExercise = false, false
+for _ = 1, 300 do
+    local tokensBefore = HoppdebaeseDB.fuultierTokens
+    tokenSession.addon:ShowChallenge("manual")
+    for _ = 1, 100 do tokenMain.scripts.OnUpdate(tokenMain, 0.05) end
+    local challenge = tokenSession.addon.currentChallenge
+    local expectedAward = challenge.id == "squats" and challenge.rewardRatio >= 0.90
+    assert(HoppdebaeseDB.fuultierTokens == tokensBefore, "Rolling an exercise awarded a Fuultier token before completion")
+    assert(HoppdebaeseDB.todo[1].rewardRatio == challenge.rewardRatio, "Todo did not preserve the rolled reward ratio")
+    tokenSession.addon.todoRows[1].complete.scripts.OnClick(tokenSession.addon.todoRows[1].complete)
+    assert(HoppdebaeseDB.fuultierTokens == tokensBefore + (expectedAward and 1 or 0), "Completed exercise token eligibility was applied incorrectly")
+    if challenge.id == "squats" then
+        if expectedAward then sawQualifyingExercise = true else sawNonQualifyingExercise = true end
+    end
+    HoppdebaeseDB.daily.stats.squats = 0
+    if sawQualifyingExercise and sawNonQualifyingExercise then break end
+end
+assert(sawQualifyingExercise and sawNonQualifyingExercise, "Token test did not cover both exercise value bands")
+
+for id in pairs(dailyGoals) do tokenSession.addon.sessionDisabled[id] = true end
+HoppdebaeseDB.triggers.cats = true
+local tokensBeforeChallenges = HoppdebaeseDB.fuultierTokens
+local sawHighCat = false
+for _ = 1, 300 do
+    tokenSession.addon:ShowChallenge("manual")
+    for _ = 1, 100 do tokenMain.scripts.OnUpdate(tokenMain, 0.05) end
+    local challenge = tokenSession.addon.currentChallenge
+    assert(HoppdebaeseDB.fuultierTokens == tokensBeforeChallenges, "Rolling a non-exercise challenge awarded a Fuultier token")
+    if challenge.id == "catPlay" and challenge.rewardRatio >= 0.90 then sawHighCat = true end
+    tokenSession.addon.todoRows[1].complete.scripts.OnClick(tokenSession.addon.todoRows[1].complete)
+    assert(HoppdebaeseDB.fuultierTokens == tokensBeforeChallenges, "Completing a non-exercise challenge awarded a Fuultier token")
+    if sawHighCat then break end
+end
+assert(sawHighCat, "Token test did not roll a top-ten-percent cat challenge")
+
+HoppdebaeseDB.fuultierTokens = 3
+HoppdebaeseDB.todo = {
+    { todoID = 9001, id = "squats", text = "20 squats", icon = "", amount = 20, unit = "reps" },
+}
+local squatsBeforeSkip = tonumber(HoppdebaeseDB.stats.squats) or 0
+local completionsBeforeSkip = tonumber(HoppdebaeseDB.completionCounts.squats) or 0
+tokenSession.addon:RefreshTodo()
+local skipButton = tokenSession.addon.todoRows[1].skip
+assert(skipButton:IsShown() and skipButton.enabled, "Exercise Skip button was not enabled with three tokens")
+skipButton.scripts.OnClick(skipButton)
+assert(HoppdebaeseDB.fuultierTokens == 0 and #HoppdebaeseDB.todo == 0, "Exercise skip did not spend exactly three tokens")
+assert((tonumber(HoppdebaeseDB.stats.squats) or 0) == squatsBeforeSkip, "Skipped exercise credited volume")
+assert((tonumber(HoppdebaeseDB.completionCounts.squats) or 0) == completionsBeforeSkip, "Skipped exercise credited a completion")
+
+HoppdebaeseDB.todo = {
+    { todoID = 9002, id = "catPlay", text = "Play with your cats for 20 minutes", icon = "", amount = 20, unit = "min" },
+}
+tokenSession.addon:RefreshTodo()
+assert(not tokenSession.addon.todoRows[1].skip:IsShown(), "Cat challenge displayed an exercise Skip button")
+assert(tokenSession.addon.todoTokenText.text == "Fuultier tokens: 0", "Todo token counter is incorrect")
+HoppdebaeseDB.todo = {}
+HoppdebaeseDB.fuultierTokens = 2
+savedDB = HoppdebaeseDB
+local tokenReload = startSession("2026-11-08", 407, "medium")
+assert(HoppdebaeseDB.fuultierTokens == 2, "Fuultier tokens did not survive reload")
+tokenReload.named.HoppdebaeseSettings:Show()
+assert(tokenReload.addon.settingsTokenText.text == "Fuultier tokens: 2", "Settings token counter is incorrect")
+
 -- Daily caps intentionally alter long sessions, so test the raw selection weight
 -- separately without completing challenges or changing the available pool.
 savedDB = nil
@@ -713,6 +791,38 @@ assert(not pcall(findButton, reloadedSession.frames, "Complete & Close"), "Main 
 local todoComplete = findButton(reloadedSession.frames, "Complete")
 todoComplete.scripts.OnClick(todoComplete)
 assert(#HoppdebaeseDB.todo == 0, "Reloaded Todo could not be completed")
+
+local statsBeforeReset = HoppdebaeseDB.stats
+local countsBeforeReset = HoppdebaeseDB.completionCounts
+local guildStatsBeforeReset = HoppdebaeseDB.guildStats
+local todoBeforeReset = HoppdebaeseDB.todo
+local completedBeforeReset = HoppdebaeseDB.completedChallenges
+local tokensBeforeReset = HoppdebaeseDB.fuultierTokens
+local resetExpectations = {
+    main = { frame = "HoppdebaeseBoxFrame", width = 500, height = 430, x = 0, y = 40 },
+    todo = { frame = "HoppdebaeseTodo", width = 560, height = 470, x = 25, y = 10 },
+    leaderboard = { frame = "HoppdebaeseLeaderboard", width = 650, height = 500, x = 50, y = 20 },
+    exerciseLeaderboard = { frame = "HoppdebaeseExerciseLeaderboard", width = 610, height = 580, x = 75, y = 0 },
+    rested = { frame = "HoppdebaeseRested", width = 520, height = 430, x = 10, y = 20 },
+    help = { frame = "HoppdebaeseHelp", width = 720, height = 600, x = -20, y = 10 },
+    progress = { frame = "HoppdebaeseProgress", width = 690, height = 590, x = -35, y = 10 },
+    settings = { frame = "HoppdebaeseSettings", width = 420, height = 670, x = 0, y = 0 },
+}
+for key, expected in pairs(resetExpectations) do
+    local window = assert(reloadedSession.named[expected.frame], key .. " window is missing")
+    local reset = assert(reloadedSession.addon.windowResetButtons[key], key .. " reset button is missing")
+    window:SetSize(333, 222)
+    window:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", 91, -73)
+    reset.scripts.OnClick(reset)
+    local point, _, relativePoint, x, y = window:GetPoint(1)
+    assert(window:GetWidth() == expected.width and window:GetHeight() == expected.height, key .. " reset did not restore size")
+    assert(point == "CENTER" and relativePoint == "CENTER" and x == expected.x and y == expected.y, key .. " reset did not restore position")
+end
+assert(HoppdebaeseDB.window.width == 500 and HoppdebaeseDB.window.height == 430, "Main reset geometry was not persisted")
+assert(HoppdebaeseDB.todoWindow.width == 560 and HoppdebaeseDB.todoWindow.height == 470, "Todo reset geometry was not persisted")
+assert(HoppdebaeseDB.stats == statsBeforeReset and HoppdebaeseDB.completionCounts == countsBeforeReset, "Window reset replaced progress data")
+assert(HoppdebaeseDB.guildStats == guildStatsBeforeReset and HoppdebaeseDB.todo == todoBeforeReset, "Window reset replaced guild or Todo data")
+assert(HoppdebaeseDB.completedChallenges == completedBeforeReset and HoppdebaeseDB.fuultierTokens == tokensBeforeReset, "Window reset changed progress values")
 
 local reloadedMain = reloadedSession.named.HoppdebaeseBoxFrame
 reloadedMain:Show()

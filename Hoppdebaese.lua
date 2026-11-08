@@ -13,6 +13,7 @@ local DEFAULTS = {
     completionCounts = {},
     guildStats = {},
     completedChallenges = 0,
+    fuultierTokens = 0,
     questsCompleted = 0,
     questInterval = 10,
     professionRanks = {},
@@ -223,6 +224,46 @@ local COMPLETION_QUOTES = {
     "Absoluti Maschine, Garantie leider abgloffe",
     "Chat spammt W, Nachbere spammed Muskelkater",
     "Level 60 Körper incoming, trust the process",
+    "Obama seit: Yes you can – und er isch lowkey stolz",
+    "Gandhi wär stolz, aber würd jetzt e Pause empfehle",
+    "Richi seit: Das isch Premium-Büez, ich bin stolz",
+    "Sam Altman hets berechnet: 99.9% Stolz-Wahrscheinlichkeit",
+    "Arnold seit: I am proud of you – jetzt no one rep",
+    "Roger Federer nickt elegant und isch stolz",
+    "Einstein wär stolz: relativ wenig Motivation, absoluti Gains",
+    "Taylor Swift isch stolz – das isch jetzt dini Gains Era",
+    "Snoop Dogg seit: Fo shizzle, bin stolz uf dich",
+    "David Attenborough flüsteret: A magnificent rep. He is proud.",
+    "Dä Sofa-Endboss het scho wieder verlore",
+    "W Fitness, L Usrede – perfekti Balance",
+    "Achievement unlocked: Nöd nur drüber gredt",
+    "Dini Muskle sind jetzt offiziell im Early Access",
+    "Chat het abstimmt: Du bisch stabil",
+    "Realitätscheck bestanden, Körper no online",
+    "Dä innere Schweinehund tippt grad /ff",
+    "Patch Notes: Motivation +1, Ausrede -3",
+    "Speedrun Kategorie: Körper nöd verlottere lah",
+    "Abgliferet wie bestellt, sogar ohni Expresszuschlag",
+    "Früener hämmer das ohni App gmacht, aber stabil bisch trotzdem",
+    "Nach dere Büez hesch dir es Rivella verdient",
+    "Dä Rücken dankt, d Krankekasse applaudiert",
+    "So, und jetzt no de Rase mähe, junger Maa",
+    "Handschlagqualität: Üebig gmacht, Wort ghalte",
+    "OMEGALUL, dä Schweinehund got exposed",
+    "EZ Clap, Exercise diff komplett zerstört",
+    "monkaS, dä Puls het kurz Aggro zoge",
+    "CLIP IT CHAT, er het würkli fertig gmacht",
+    "modCheck, wer het dem so viel Motivation geh?",
+    "Aura +1000, Körperhaltung immer no beta",
+    "Delulu isch jetzt solulu mit Muskelkater",
+    "Unspoken Fitness Rizz erfolgreich aktiviert",
+    "Du bisch nöd cooked, du bisch meal-prepped",
+    "6 7 Reps? Nei Bruder, alli Reps. Absolute Cinema.",
+    "Skibidi Grindset mit zertifiziertem W-Ausgang",
+    "Ohio-Level Motivation, aber irgendwie hets funktioniert",
+    "Gopferdammi, das isch jetzt aber würkli stabil gsi",
+    "Bünzli-approved: korrekt usgführt und sauber abghakt",
+    "Mehr Gains als Cumulus-Pünkt, das muess mer ersch würke",
 }
 
 -- Goals cap how much of one movement can be assigned in a calendar day. They
@@ -434,6 +475,7 @@ local function BuildChallenge(exercise, tier, multiplier, difficultyKey, level)
     local amount = math.max(1, math.floor((PickValue(values) * valueMultiplier) + 0.5))
     local minimum = math.max(1, math.floor((values.min * valueMultiplier) + 0.5))
     local maximum = math.max(minimum, math.floor((values.max * valueMultiplier) + 0.5))
+    local rewardRatio = maximum > minimum and ((amount - minimum) / (maximum - minimum)) or 0
     local remaining = GetRemainingDailyGoal(exercise.id)
     if remaining then
         amount = math.min(amount, remaining)
@@ -451,6 +493,7 @@ local function BuildChallenge(exercise, tier, multiplier, difficultyKey, level)
         icon = exercise.icon,
         valueRatio = math.max(0, math.min(1, valueRatio)),
         higherIsBetter = exercise.higherIsBetter,
+        rewardRatio = math.max(0, math.min(1, rewardRatio)),
     }
 end
 
@@ -702,10 +745,33 @@ local function RemoveTodo(todoID)
     return false
 end
 
+local function RefreshFuultierTokens()
+    local amount = math.max(0, math.floor(tonumber(HoppdebaeseDB.fuultierTokens) or 0))
+    if addon.todoTokenText then addon.todoTokenText:SetText("Fuultier tokens: " .. amount) end
+    if addon.settingsTokenText then addon.settingsTokenText:SetText("Fuultier tokens: " .. amount) end
+end
+
+local function SkipTodo(todoID)
+    for _, item in ipairs(HoppdebaeseDB.todo) do
+        if item.todoID == todoID then
+            if not DAILY_GOALS[item.id] or (tonumber(HoppdebaeseDB.fuultierTokens) or 0) < 3 then return false end
+            HoppdebaeseDB.fuultierTokens = math.max(0, math.floor(HoppdebaeseDB.fuultierTokens - 3))
+            RemoveTodo(todoID)
+            RefreshFuultierTokens()
+            return true
+        end
+    end
+    return false
+end
+
 local function CompleteTodo(todoID)
     for _, item in ipairs(HoppdebaeseDB.todo) do
         if item.todoID == todoID then
             CreditChallenge(item)
+            if DAILY_GOALS[item.id] and (tonumber(item.rewardRatio) or 0) >= 0.90 then
+                HoppdebaeseDB.fuultierTokens = (tonumber(HoppdebaeseDB.fuultierTokens) or 0) + 1
+                RefreshFuultierTokens()
+            end
             if HoppdebaeseDB.announceCompletion and IsInGuild() and type(SendChatMessage) == "function" then
                 SendChatMessage(string.format(
                     "Hoppdebäse completed from %s: %s - %s",
@@ -731,6 +797,7 @@ local function AddTodo(challenge)
         amount = challenge.amount,
         unit = challenge.unit,
         icon = challenge.icon,
+        rewardRatio = challenge.rewardRatio,
         trigger = addon.currentTrigger,
         eventLabel = addon.currentEventLabel,
         createdAt = time and time() or 0,
@@ -781,6 +848,19 @@ local function SaveWindowPosition(frame)
     HoppdebaeseDB.window.y = y
     HoppdebaeseDB.window.width = frame:GetWidth()
     HoppdebaeseDB.window.height = frame:GetHeight()
+end
+
+local function CreateWindowResetButton(frame, key, width, height, point, relativePoint, x, y, onReset)
+    local button = CreateButton(frame, "Reset Window", 92)
+    button:SetScript("OnClick", function()
+        frame:ClearAllPoints()
+        frame:SetSize(width, height)
+        frame:SetPoint(point, UIParent, relativePoint, x, y)
+        if onReset then onReset(frame) end
+    end)
+    addon.windowResetButtons = addon.windowResetButtons or {}
+    addon.windowResetButtons[key] = button
+    return button
 end
 
 local BOX_ROW_COUNT = 5
@@ -1045,6 +1125,9 @@ local function CreateMainWindow()
     help:SetScript("OnClick", function() addon.helpFrame:Show() end)
     AttachTooltip(help, "Hoppdebäse Help", "Open button, exercise, and settings details.")
 
+    local reset = CreateWindowResetButton(frame, "main", 500, 430, "CENTER", "CENTER", 0, 40, SaveWindowPosition)
+    reset:SetPoint("TOPRIGHT", -14, -46)
+
     local resize = CreateFrame("Button", nil, frame)
     resize:SetSize(20, 20)
     resize:SetPoint("BOTTOMRIGHT", -3, 3)
@@ -1231,6 +1314,9 @@ local function CreateLeaderboardWindow()
     close:SetPoint("BOTTOMRIGHT", -22, 20)
     close:SetScript("OnClick", function() frame:Hide() end)
 
+    local reset = CreateWindowResetButton(frame, "leaderboard", 650, 500, "CENTER", "CENTER", 50, 20)
+    reset:SetPoint("TOPRIGHT", -12, -12)
+
     frame:SetScript("OnShow", function() RefreshLeaderboard(true) end)
     frame:Hide()
     addon.leaderboardFrame = frame
@@ -1358,6 +1444,9 @@ local function CreateExerciseLeaderboardWindow()
     close:SetPoint("BOTTOMRIGHT", -22, 20)
     close:SetScript("OnClick", function() frame:Hide() end)
 
+    local reset = CreateWindowResetButton(frame, "exerciseLeaderboard", 610, 580, "CENTER", "CENTER", 75, 0)
+    reset:SetPoint("TOPRIGHT", -12, -12)
+
     frame:SetScript("OnShow", function() RefreshExerciseLeaderboard(true) end)
     frame:Hide()
     addon.exerciseLeaderboardFrame = frame
@@ -1453,9 +1542,14 @@ local function CreateTodoWindow()
     subtitle:SetPoint("LEFT", title, "RIGHT", 8, 0)
     addon.todoSubtitle = subtitle
 
+    local tokenText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    tokenText:SetPoint("BOTTOMLEFT", 10, 10)
+    tokenText:SetTextColor(1, 0.82, 0.28)
+    addon.todoTokenText = tokenText
+
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 9, -34)
-    scroll:SetPoint("BOTTOMRIGHT", -28, 12)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 30)
 
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(485, 1)
@@ -1490,13 +1584,18 @@ local function CreateTodoWindow()
 
                 row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                 row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-                row.text:SetPoint("RIGHT", -72, 0)
+                row.text:SetPoint("RIGHT", -130, 0)
                 row.text:SetJustifyH("LEFT")
 
                 row.complete = CreateButton(row, "Complete", 66)
                 row.complete:SetSize(66, 22)
                 row.complete:SetPoint("RIGHT", -2, 0)
                 row.complete:SetScript("OnClick", function(button) CompleteTodo(button.todoID) end)
+
+                row.skip = CreateButton(row, "Skip", 52)
+                row.skip:SetSize(52, 22)
+                row.skip:SetPoint("RIGHT", row.complete, "LEFT", -4, 0)
+                row.skip:SetScript("OnClick", function(button) SkipTodo(button.todoID) end)
                 self.todoRows[index] = row
             end
 
@@ -1505,6 +1604,13 @@ local function CreateTodoWindow()
             row.icon:SetTexture(item.icon)
             row.text:SetText(item.text)
             row.complete.todoID = item.todoID
+            row.skip.todoID = item.todoID
+            if DAILY_GOALS[item.id] then
+                row.skip:Show()
+                if (tonumber(HoppdebaeseDB.fuultierTokens) or 0) >= 3 then row.skip:Enable() else row.skip:Disable() end
+            else
+                row.skip:Hide()
+            end
             row:Show()
         end
 
@@ -1512,12 +1618,25 @@ local function CreateTodoWindow()
         self.todoContent:SetHeight(math.max(1, count * 32))
         self.todoSubtitle:SetText("(" .. count .. ")")
         if self.todoButton then self.todoButton:SetText("Todo (" .. count .. ")") end
+        RefreshFuultierTokens()
     end
 
     local close = CreateButton(frame, "X", 24)
     close:SetSize(24, 20)
     close:SetPoint("TOPRIGHT", -7, -7)
     close:SetScript("OnClick", function() frame:Hide() end)
+
+    local reset = CreateWindowResetButton(frame, "todo", 560, 470, "CENTER", "CENTER", 25, 10, function(self)
+        local point, _, relativePoint, x, y = self:GetPoint(1)
+        HoppdebaeseDB.todoWindow.point = point
+        HoppdebaeseDB.todoWindow.relativePoint = relativePoint
+        HoppdebaeseDB.todoWindow.x = x
+        HoppdebaeseDB.todoWindow.y = y
+        HoppdebaeseDB.todoWindow.width = self:GetWidth()
+        HoppdebaeseDB.todoWindow.height = self:GetHeight()
+    end)
+    reset:SetSize(82, 20)
+    reset:SetPoint("TOPRIGHT", -35, -7)
 
     local resize = CreateFrame("Button", nil, frame)
     resize:SetSize(20, 20)
@@ -1639,6 +1758,9 @@ local function CreateRestedWindow()
     close:SetPoint("BOTTOMRIGHT", -22, 20)
     close:SetScript("OnClick", function() frame:Hide() end)
 
+    local reset = CreateWindowResetButton(frame, "rested", 520, 430, "CENTER", "CENTER", 10, 20)
+    reset:SetPoint("TOPRIGHT", -12, -12)
+
     frame:SetScript("OnShow", function() addon:RefreshRested() end)
     frame:Hide()
     addon.restedFrame = frame
@@ -1660,7 +1782,9 @@ local function BuildHelpText()
         "|cffffffffMinimap icon|r - Left-click Todo, Shift-left-click guild leaderboard, and right-click Settings.",
         "|cffffffffRefresh Guild|r - Requests current leaderboard data from online guild members using the addon.",
         "|cffffffffComplete|r - Finishes a Todo challenge, credits its progress, and removes it from Todo.",
+        "|cffffffffSkip|r - Spends 3 Fuultier tokens to remove one physical exercise without crediting it. Wellness and cat challenges cannot be skipped with tokens.",
         "|cffffffffRestore|r - Removes an exercise from the session-rested list so it can roll again.",
+        "|cffffffffReset Window|r - Restores only that window's original size and position; progress, settings, Todo entries, and tokens are unchanged.",
         "|cffffffffClose / Done|r - Closes the current secondary window without changing pending challenges.",
         " ",
         "|cffffc74dSETTINGS|r",
@@ -1674,6 +1798,7 @@ local function BuildHelpText()
         "|cffffffffCats|r - Adds cat play and petting prompts to every difficulty at 1.2x selection weight.",
         "|cffffffffRoll announcement|r - Posts the selected challenge and originating event to guild chat.",
         "|cffffffffCompletion announcement|r - Posts the completed challenge, event, and a random Swiss-German message.",
+        "|cffffffffFuultier tokens|r - Completing a physical exercise rolled within the top 10% of its maximum awards 1 token. Spend 3 tokens to skip one Todo exercise. Wellness and cat challenges never award tokens.",
         "|cffffffffWorkout bench|r - Enables bench presses and helps unlock seated shoulder presses.",
         "|cffffffffPull-up bar|r - Enables pull-ups and dead hangs.",
         "|cffffffffDumbbells|r - Enables curls, rows, raises, triceps extensions, and dumbbell presses.",
@@ -1749,6 +1874,9 @@ local function CreateHelpWindow()
     local close = CreateButton(frame, "Close", 100)
     close:SetPoint("BOTTOMRIGHT", -22, 20)
     close:SetScript("OnClick", function() frame:Hide() end)
+
+    local reset = CreateWindowResetButton(frame, "help", 720, 600, "CENTER", "CENTER", -20, 10)
+    reset:SetPoint("TOPRIGHT", -12, -12)
 
     frame:Hide()
     addon.helpFrame = frame
@@ -1866,6 +1994,9 @@ local function CreateProgressWindow()
     close:SetPoint("BOTTOMRIGHT", -22, 20)
     close:SetScript("OnClick", function() frame:Hide() end)
 
+    local reset = CreateWindowResetButton(frame, "progress", 690, 590, "CENTER", "CENTER", -35, 10)
+    reset:SetPoint("TOPRIGHT", -12, -12)
+
     frame:SetScript("OnShow", function() addon:RefreshProgress() end)
     frame:Hide()
     addon.progressFrame = frame
@@ -1889,6 +2020,11 @@ local function CreateSettingsWindow()
     title:SetText("Hoppdebäse Settings")
     title:SetTextColor(0.38, 0.95, 0.68)
 
+    local tokenText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    tokenText:SetPoint("TOPRIGHT", -18, -24)
+    tokenText:SetTextColor(1, 0.82, 0.28)
+    addon.settingsTokenText = tokenText
+
     local difficultyTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     difficultyTitle:SetPoint("TOPLEFT", 24, -58)
     difficultyTitle:SetText("Workout difficulty")
@@ -1911,7 +2047,10 @@ local function CreateSettingsWindow()
         end)
         addon.difficultyButtons[key] = button
     end
-    frame:HookScript("OnShow", RefreshDifficultyButtons)
+    frame:HookScript("OnShow", function()
+        RefreshDifficultyButtons()
+        RefreshFuultierTokens()
+    end)
 
     local triggerTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     triggerTitle:SetPoint("TOPLEFT", 24, -122)
@@ -1987,6 +2126,9 @@ local function CreateSettingsWindow()
         frame:Hide()
         addon:ShowChallenge("manual")
     end)
+
+    local reset = CreateWindowResetButton(frame, "settings", 420, 670, "CENTER", "CENTER", 0, 0)
+    reset:SetPoint("BOTTOM", 0, 18)
 
     frame:Hide()
     addon.settingsFrame = frame
