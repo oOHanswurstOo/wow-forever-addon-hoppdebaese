@@ -13,6 +13,7 @@ assert(tonumber(freshAirMinimum) == 30 and tonumber(freshAirMaximum) == 120, "St
 assert(addonSource:find('text = "Do the dishes if not done, else free"', 1, true), "Dishes challenge is missing")
 assert(addonSource:find('id = "deadHang"', 1, true), "Dead hang challenge is missing")
 assert(addonSource:find('cooldown = 14400', 1, true), "Shower cooldown is missing")
+assert(addonSource:find('flight = { title = "3 Flight Paths Challenge", multiplier = 0.5 }', 1, true), "Flight challenges must use the nerfed 0.5 multiplier")
 assert(addonSource:find('id = "lunges", code = "lu"', 1, true), "Forward lunges challenge is missing")
 assert(addonSource:find('id = "calfRaises"', 1, true) and addonSource:find('amountMultiplier = 1.35', 1, true), "Calf-raise values were not increased")
 assert(addonSource:find('id = "catPlay"', 1, true) and addonSource:find('id = "catPets"', 1, true), "Cat challenges are missing")
@@ -218,7 +219,13 @@ local function runPrompt(session, eventName, label, level, shouldSwap)
     if level then simulatedLevel = level end
     if eventName == "FLIGHT" then
         assert(taxiHook, "Taxi hook was not installed")
+        local flightsBefore = HoppdebaeseDB.flightPathsStarted
         taxiHook()
+        assert(HoppdebaeseDB.flightPathsStarted == flightsBefore + 1 and not session.addon.rolling, "First flight path triggered too early")
+        taxiHook()
+        assert(HoppdebaeseDB.flightPathsStarted == flightsBefore + 2 and not session.addon.rolling, "Second flight path triggered too early")
+        taxiHook()
+        assert(HoppdebaeseDB.flightPathsStarted == flightsBefore + 3 and session.addon.rolling, "Third flight path did not trigger")
     else
         session.addon.scripts.OnEvent(session.addon, eventName, level)
     end
@@ -860,6 +867,23 @@ assert(not reloadedMain:IsShown(), "Minimize did not hide the main window")
 
 distributionSession = reloadedSession
 mainFrame = reloadedMain
+
+-- Flight starts keep counting while disabled and only every third enabled start opens the box.
+mainFrame:Hide()
+HoppdebaeseDB.flightPathsStarted = 0
+HoppdebaeseDB.triggers.flight = false
+for _ = 1, 3 do taxiHook() end
+assert(HoppdebaeseDB.flightPathsStarted == 3, "Disabled flight trigger stopped counting paths")
+assert(not mainFrame:IsShown() and not distributionSession.addon.rolling, "Disabled flight trigger opened the box")
+HoppdebaeseDB.triggers.flight = true
+taxiHook()
+taxiHook()
+assert(not mainFrame:IsShown() and not distributionSession.addon.rolling, "Flight trigger opened before the next multiple of three")
+taxiHook()
+assert(mainFrame:IsShown() and distributionSession.addon.rolling, "Sixth counted flight path did not open the box")
+for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+HoppdebaeseDB.todo = {}
+mainFrame:Hide()
 
 -- Exactly the tenth completed quest should open the box; disabled triggers keep counting.
 mainFrame:Hide()

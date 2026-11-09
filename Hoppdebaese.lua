@@ -14,6 +14,7 @@ local DEFAULTS = {
     guildStats = {},
     completedChallenges = 0,
     fuultierTokens = 0,
+    flightPathsStarted = 0,
     questsCompleted = 0,
     questInterval = 10,
     professionRanks = {},
@@ -191,7 +192,7 @@ local CHALLENGE_DESCRIPTIONS = {
 local TRIGGER_INFO = {
     levelUp = { title = "Level Up Challenge", multiplier = 1 },
     death = { title = "Defeat Recovery Challenge", multiplier = 1.35 },
-    flight = { title = "Flight Path Challenge", multiplier = 0.75 },
+    flight = { title = "3 Flight Paths Challenge", multiplier = 0.5 },
     dungeon = { title = "Dungeon Complete Challenge", multiplier = 1.2 },
     quest = { title = "10 Quests Complete Challenge", multiplier = 1 },
     profession = { title = "Profession Skill Milestone", multiplier = 1 },
@@ -1808,7 +1809,7 @@ local function BuildHelpText()
         "|cffffffffDifficulty|r - Easy uses 0.7x amounts, Medium 1x, Hard 1.5x, and Extreme 3x. Daily goals scale separately; Extreme is twice Hard.",
         "|cffffffffPlayer level-up|r - Rolls when your character gains a level.",
         "|cffffffffPlayer death|r - Rolls after death with a 1.35x event multiplier.",
-        "|cffffffffFlight path starts|r - Rolls when selecting a taxi, using a lighter 0.75x multiplier.",
+        "|cffffffffEvery 3 flight paths|r - Counts taxi starts and rolls on every third one, using a lighter 0.5x multiplier.",
         "|cffffffffDungeon completion|r - Rolls for supported dungeon-completion events with a 1.2x multiplier.",
         "|cffffffffQuest interval|r - Choose a challenge every 3 to 15 completed quests; the default is 10.",
         "|cffffffffEvery 10 profession skill points|r - Rolls from a mix of wellness breaks and Easy exercises for all profession slots.",
@@ -2077,7 +2078,7 @@ local function CreateSettingsWindow()
     local triggers = {
         { key = "levelUp", text = "Player level-up" },
         { key = "death", text = "Player death (harder)" },
-        { key = "flight", text = "Flight path starts (easier)" },
+        { key = "flight", text = "Every 3 flight paths (easier)" },
         { key = "dungeon", text = "Dungeon completion" },
         { key = "quests", text = "Quest completion interval" },
         { key = "professions", text = "Every 10 profession skill points" },
@@ -2322,7 +2323,9 @@ addon:RegisterEvent("PLAYER_DEAD")
 -- action after it runs is secure and precisely identifies a selected flight path.
 if type(hooksecurefunc) == "function" and type(TakeTaxiNode) == "function" then
     hooksecurefunc("TakeTaxiNode", function()
-        if HoppdebaeseDB and HoppdebaeseDB.triggers.flight then
+        if not HoppdebaeseDB then return end
+        HoppdebaeseDB.flightPathsStarted = (tonumber(HoppdebaeseDB.flightPathsStarted) or 0) + 1
+        if HoppdebaeseDB.triggers.flight and HoppdebaeseDB.flightPathsStarted % 3 == 0 then
             addon:ShowChallenge("flight")
         end
     end)

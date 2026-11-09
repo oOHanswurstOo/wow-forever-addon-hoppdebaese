@@ -1,7 +1,7 @@
 # Hoppdebäse
 
 Hoppdebäse turns in-game milestones into realistic workout prompts. It supports
-level-ups, player deaths, flight path starts, dungeon completions, and every tenth
+level-ups, player deaths, every third flight path start, dungeon completions, and every tenth
 completed quest or profession skill point milestone, with
 Easy, Medium, Hard, and Extreme scaling. Extreme doubles Hard challenge amounts
 and daily goals. Each physical exercise has a conservative daily goal; after
@@ -68,6 +68,9 @@ special Swiss-German challenge has a one-percent roll chance.
 The Easy prompt pool includes a posture check. The disabled-by-default
 **Significant other** setting adds "Spend quality time with your significant
 other" with no assigned duration.
+
+Flight paths are counted persistently and trigger a challenge on every third
+start. Flight challenges use a lighter `0.5x` amount multiplier.
 
 The exercise pool includes both forward and reverse lunges. Calf raises use a
 slightly higher amount scale than standard repetition exercises.
