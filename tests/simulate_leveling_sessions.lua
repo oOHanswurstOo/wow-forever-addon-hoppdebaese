@@ -16,11 +16,14 @@ assert(addonSource:find('cooldown = 14400', 1, true), "Shower cooldown is missin
 assert(addonSource:find('id = "lunges", code = "lu"', 1, true), "Forward lunges challenge is missing")
 assert(addonSource:find('id = "calfRaises"', 1, true) and addonSource:find('amountMultiplier = 1.35', 1, true), "Calf-raise values were not increased")
 assert(addonSource:find('id = "catPlay"', 1, true) and addonSource:find('id = "catPets"', 1, true), "Cat challenges are missing")
+assert(addonSource:find('id = "catLitter"', 1, true) and addonSource:find('text = "Clean up the cat litter box"', 1, true), "Cat litter challenge is missing")
+assert(addonSource:find('id = "postureCheck"', 1, true) and addonSource:find('name = "Posture check"', 1, true), "Easy posture challenge is missing")
+assert(addonSource:find('id = "qualityTime"', 1, true) and addonSource:find('text = "Spend quality time with your significant other"', 1, true), "Significant-other challenge is missing or timed")
 assert(addonSource:find('values = { min = 5, max = 20 }, fixedScale = true, higherIsBetter = true', 1, true), "Cat play must use a 5-20 minute higher-is-better range")
 local catChallengeBlock = assert(addonSource:match("local CAT_CHALLENGES = {(.-)\n}"), "Cat challenge pool is missing")
 local catWeightCount = 0
 for _ in catChallengeBlock:gmatch("weight = 1%.2") do catWeightCount = catWeightCount + 1 end
-assert(catWeightCount == 2, "Both cat challenges must use 1.2 selection weight")
+assert(catWeightCount == 3, "All cat challenges must use 1.2 selection weight")
 local completionQuoteBlock = assert(addonSource:match("local COMPLETION_QUOTES = {(.-)\n}"), "Completion quotes are missing")
 local completionQuoteCount = 0
 for _ in completionQuoteBlock:gmatch('\n%s*"') do completionQuoteCount = completionQuoteCount + 1 end
@@ -562,6 +565,7 @@ savedDB = nil
 simulatedLevel = 20
 local distributionSession = startSession("2026-11-07", 404, "medium")
 assert(HoppdebaeseDB.triggers.cats == true, "Cats setting was not enabled by default")
+assert(HoppdebaeseDB.triggers.significantOther == false, "Significant-other setting must default off")
 local minimapButton = assert(distributionSession.named.HoppdebaeseMinimapButton, "Minimap button was not created")
 distributionSession.named.HoppdebaeseTodo:Hide()
 minimapButton.scripts.OnClick(minimapButton, "LeftButton")
@@ -636,7 +640,7 @@ local distributionTotal = 2000
 local stapleHits = 0
 local rareHits = 0
 local stapleCounts = { squats = 0, situps = 0, pushups = 0 }
-local catCounts = { catPlay = 0, catPets = 0 }
+local catCounts = { catPlay = 0, catPets = 0, catLitter = 0 }
 local mainFrame = assert(distributionSession.named.HoppdebaeseBoxFrame)
 local todoFrame = assert(distributionSession.named.HoppdebaeseTodo)
 assert(todoFrame.backdropColor and todoFrame.backdropColor[4] == 0.38, "Todo backdrop is not sufficiently translucent")
@@ -692,10 +696,10 @@ for _ = 1, distributionTotal do
 end
 
 local stapleShare = stapleHits / distributionTotal
-assert(stapleShare > 0.24, string.format("Weighted staple share too low: %.1f%%", stapleShare * 100))
-assert(stapleShare < 0.35, string.format("Weighted staple share too high: %.1f%%", stapleShare * 100))
+assert(stapleShare > 0.20, string.format("Weighted staple share too low: %.1f%%", stapleShare * 100))
+assert(stapleShare < 0.32, string.format("Weighted staple share too high: %.1f%%", stapleShare * 100))
 assert(rareHits >= 5 and rareHits <= 40, "Rare challenge did not stay near one percent: " .. rareHits)
-assert(catCounts.catPlay > 0 and catCounts.catPets > 0, "Enabled cat challenges did not enter the wheel")
+assert(catCounts.catPlay > 0 and catCounts.catPets > 0 and catCounts.catLitter > 0, "Enabled cat challenges did not enter the wheel")
 
 HoppdebaeseDB.triggers.cats = false
 for _ = 1, 100 do
@@ -705,6 +709,31 @@ for _ = 1, 100 do
     assert(not catCounts[challengeID], "Disabled cat challenge entered the wheel")
     HoppdebaeseDB.todo = {}
 end
+HoppdebaeseDB.triggers.cats = true
+
+HoppdebaeseDB.triggers.cats = false
+HoppdebaeseDB.triggers.significantOther = false
+for _ = 1, 100 do
+    distributionSession.addon:ShowChallenge("manual")
+    for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+    assert(distributionSession.addon.currentChallenge.id ~= "qualityTime", "Disabled significant-other challenge entered the wheel")
+    HoppdebaeseDB.todo = {}
+end
+HoppdebaeseDB.triggers.significantOther = true
+local sawQualityTime = false
+for _ = 1, 300 do
+    distributionSession.addon:ShowChallenge("manual")
+    for _ = 1, 100 do mainFrame.scripts.OnUpdate(mainFrame, 0.05) end
+    local challenge = distributionSession.addon.currentChallenge
+    if challenge.id == "qualityTime" then
+        assert(challenge.text == "Spend quality time with your significant other", "Quality-time challenge displayed a time amount")
+        sawQualityTime = true
+    end
+    HoppdebaeseDB.todo = {}
+    if sawQualityTime then break end
+end
+assert(sawQualityTime, "Enabled significant-other challenge did not enter the wheel")
+HoppdebaeseDB.triggers.significantOther = false
 HoppdebaeseDB.triggers.cats = true
 print("\nWeighted selection over " .. distributionTotal .. " unchanged-pool rolls:")
 print(string.format(
@@ -806,7 +835,7 @@ local resetExpectations = {
     rested = { frame = "HoppdebaeseRested", width = 520, height = 430, x = 10, y = 20 },
     help = { frame = "HoppdebaeseHelp", width = 720, height = 600, x = -20, y = 10 },
     progress = { frame = "HoppdebaeseProgress", width = 690, height = 590, x = -35, y = 10 },
-    settings = { frame = "HoppdebaeseSettings", width = 420, height = 670, x = 0, y = 0 },
+    settings = { frame = "HoppdebaeseSettings", width = 420, height = 700, x = 0, y = 0 },
 }
 for key, expected in pairs(resetExpectations) do
     local window = assert(reloadedSession.named[expected.frame], key .. " window is missing")

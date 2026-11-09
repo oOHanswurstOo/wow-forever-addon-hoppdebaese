@@ -48,8 +48,8 @@ Todo without crediting its amount or completion. Cat and wellness challenges
 never award tokens and never show the token Skip action. Token totals are shown
 in both Todo and Settings.
 
-When all available exercises are complete or resting, future boxes offer only
-standing/stretching, hydration, and eye-rest prompts.
+When all available exercises are complete or resting, future boxes offer lighter
+wellness prompts plus any enabled cat or significant-other prompts.
 
 Profession skill milestones at 10, 20, 30, and so on mix wellness breaks with
 Easy exercises for primary professions, Cooking, Fishing, and First Aid. Breaks include
@@ -58,11 +58,16 @@ Easy exercises for primary professions, Cooking, Fishing, and First Aid. Breaks 
 Settings provide a quest interval from 3 to 15 completed quests (default 10),
 separate roll/completion guild announcements, and equipment filters. The
 enabled-by-default **Cats** setting adds "play with your cats" and "give each
-cat pets" prompts to every difficulty wheel at a 1.2 selection weight. Cat play
+cat pets" prompts plus litter-box cleanup to every difficulty wheel at a 1.2
+selection weight. Cat play
 runs from 5 to 20 minutes; shorter rolls are red and longer rolls are green. Guild
 messages include the triggering event; completion messages end with a random
 Swiss-German/Twitch-chat line. Shower/face-wash prompts have a four-hour cooldown, and a
 special Swiss-German challenge has a one-percent roll chance.
+
+The Easy prompt pool includes a posture check. The disabled-by-default
+**Significant other** setting adds "Spend quality time with your significant
+other" with no assigned duration.
 
 The exercise pool includes both forward and reverse lunges. Calf raises use a
 slightly higher amount scale than standard repetition exercises.

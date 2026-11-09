@@ -34,6 +34,7 @@ local DEFAULTS = {
         quests = true,
         professions = true,
         cats = true,
+        significantOther = false,
     },
     tools = {
         bench = false,
@@ -130,12 +131,18 @@ local EASY_CHALLENGES = {
     { id = "shower", code = "sh", name = "Shower / face wash", text = "Take a shower / wash your face", amount = 1, unit = "times", cooldown = 14400, icon = ICONS.water },
     { id = "freshAir", code = "fa", name = "Stosslüften", label = "Open the window and walk around for %d seconds", values = { min = 30, max = 120 }, fixedScale = true, unit = "sec", icon = ICONS.recovery },
     { id = "dishes", code = "di", name = "Dishes", text = "Do the dishes if not done, else free", amount = 1, unit = "times", icon = ICONS.water },
+    { id = "postureCheck", code = "pc", name = "Posture check", text = "Posture check: sit or stand tall and relax your shoulders", amount = 1, unit = "checks", icon = ICONS.recovery },
     { id = "elephant", code = "el", name = "Rüssel strichle", text = "Gang di Rüssel go strichle", amount = 1, unit = "times", rareChance = 0.01, icon = ICONS.recovery },
 }
 
 local CAT_CHALLENGES = {
     { id = "catPlay", code = "ct", name = "Play with cats", label = "Play with your cats for %d minutes", values = { min = 5, max = 20 }, fixedScale = true, higherIsBetter = true, unit = "min", weight = 1.2, icon = "Interface\\Icons\\INV_Box_PetCarrier_01" },
     { id = "catPets", code = "pt", name = "Cat pets", label = "Give each cat %d pets", values = { min = 10, max = 30 }, fixedScale = true, unit = "pets", weight = 1.2, icon = "Interface\\Icons\\INV_Box_PetCarrier_01" },
+    { id = "catLitter", code = "cl", name = "Clean cat litter box", text = "Clean up the cat litter box", amount = 1, unit = "times", weight = 1.2, icon = "Interface\\Icons\\INV_Box_PetCarrier_01" },
+}
+
+local SIGNIFICANT_OTHER_CHALLENGES = {
+    { id = "qualityTime", code = "qt", name = "Quality time", text = "Spend quality time with your significant other", amount = 1, unit = "times", icon = "Interface\\Icons\\Spell_Holy_GreaterHeal" },
 }
 
 local CHALLENGE_DESCRIPTIONS = {
@@ -173,9 +180,12 @@ local CHALLENGE_DESCRIPTIONS = {
     shower = "Take a shower or wash your face; this prompt has a four-hour cooldown.",
     freshAir = "Open the window fully and walk around while airing the room.",
     dishes = "Do the dishes if they are waiting; otherwise this challenge is free.",
+    postureCheck = "Check your posture and reset to a comfortable upright position.",
     elephant = "A rare one-percent Swiss-German surprise challenge.",
     catPlay = "Spend the displayed number of minutes actively playing with your cats.",
     catPets = "Give every cat the displayed number of gentle pets.",
+    catLitter = "Clean up the cat litter box.",
+    qualityTime = "Spend some undistracted quality time with your significant other; no timer is assigned.",
 }
 
 local TRIGGER_INFO = {
@@ -322,6 +332,7 @@ local ALL_CHALLENGES = {}
 for _, challenge in ipairs(EXERCISES) do table.insert(ALL_CHALLENGES, challenge) end
 for _, challenge in ipairs(EASY_CHALLENGES) do table.insert(ALL_CHALLENGES, challenge) end
 for _, challenge in ipairs(CAT_CHALLENGES) do table.insert(ALL_CHALLENGES, challenge) end
+for _, challenge in ipairs(SIGNIFICANT_OTHER_CHALLENGES) do table.insert(ALL_CHALLENGES, challenge) end
 for _, challenge in ipairs(ALL_CHALLENGES) do
     CHALLENGE_BY_CODE[challenge.code] = challenge
     CHALLENGE_BY_ID[challenge.id] = challenge
@@ -537,6 +548,12 @@ local function RollChallenge(triggerKey, excludedID)
 
     if HoppdebaeseDB.triggers.cats then
         for _, challenge in ipairs(CAT_CHALLENGES) do
+            if challenge.id ~= excludedID and IsPromptAvailable(challenge) then table.insert(pool, challenge) end
+        end
+    end
+
+    if HoppdebaeseDB.triggers.significantOther then
+        for _, challenge in ipairs(SIGNIFICANT_OTHER_CHALLENGES) do
             if challenge.id ~= excludedID and IsPromptAvailable(challenge) then table.insert(pool, challenge) end
         end
     end
@@ -1795,7 +1812,8 @@ local function BuildHelpText()
         "|cffffffffDungeon completion|r - Rolls for supported dungeon-completion events with a 1.2x multiplier.",
         "|cffffffffQuest interval|r - Choose a challenge every 3 to 15 completed quests; the default is 10.",
         "|cffffffffEvery 10 profession skill points|r - Rolls from a mix of wellness breaks and Easy exercises for all profession slots.",
-        "|cffffffffCats|r - Adds cat play and petting prompts to every difficulty at 1.2x selection weight.",
+        "|cffffffffCats|r - Adds cat play, petting, and litter-box cleanup prompts to every difficulty at 1.2x selection weight.",
+        "|cffffffffSignificant other|r - Adds an untimed quality-time prompt when enabled.",
         "|cffffffffRoll announcement|r - Posts the selected challenge and originating event to guild chat.",
         "|cffffffffCompletion announcement|r - Posts the completed challenge, event, and a random Swiss-German message.",
         "|cffffffffFuultier tokens|r - Completing a physical exercise rolled within the top 10% of its maximum awards 1 token. Spend 3 tokens to skip one Todo exercise. Wellness and cat challenges never award tokens.",
@@ -2004,7 +2022,7 @@ end
 
 local function CreateSettingsWindow()
     local frame = CreateFrame("Frame", "HoppdebaeseSettings", UIParent, BACKDROP_TEMPLATE)
-    frame:SetSize(420, 670)
+    frame:SetSize(420, 700)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -2064,6 +2082,7 @@ local function CreateSettingsWindow()
         { key = "quests", text = "Quest completion interval" },
         { key = "professions", text = "Every 10 profession skill points" },
         { key = "cats", text = "Cats (include cat challenges)" },
+        { key = "significantOther", text = "Significant other (include quality time)" },
     }
     for index, info in ipairs(triggers) do
         local triggerKey = info.key
@@ -2073,7 +2092,7 @@ local function CreateSettingsWindow()
     end
 
     local questSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
-    questSlider:SetPoint("TOPLEFT", 42, -346)
+    questSlider:SetPoint("TOPLEFT", 42, -376)
     questSlider:SetSize(250, 18)
     questSlider:SetMinMaxValues(3, 15)
     questSlider:SetValueStep(1)
@@ -2094,24 +2113,24 @@ local function CreateSettingsWindow()
     addon.questSlider = questSlider
 
     local sharingTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    sharingTitle:SetPoint("TOPLEFT", 24, -390)
+    sharingTitle:SetPoint("TOPLEFT", 24, -420)
     sharingTitle:SetText("Sharing")
 
-    CreateCheckButton(frame, "Announce rolled challenge in guild chat", 22, -404,
+    CreateCheckButton(frame, "Announce rolled challenge in guild chat", 22, -434,
         function() return HoppdebaeseDB.announceGuild end,
         function(value) HoppdebaeseDB.announceGuild = value end)
 
-    CreateCheckButton(frame, "Announce completed challenge in guild chat", 22, -434,
+    CreateCheckButton(frame, "Announce completed challenge in guild chat", 22, -464,
         function() return HoppdebaeseDB.announceCompletion end,
         function(value) HoppdebaeseDB.announceCompletion = value end)
 
     local toolsTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    toolsTitle:SetPoint("TOPLEFT", 24, -476)
+    toolsTitle:SetPoint("TOPLEFT", 24, -506)
     toolsTitle:SetText("Equipment available at home")
 
     for index, info in ipairs(TOOL_LABELS) do
         local toolKey = info.key
-        CreateCheckButton(frame, info.text, 22, -490 - ((index - 1) * 30),
+        CreateCheckButton(frame, info.text, 22, -520 - ((index - 1) * 30),
             function() return HoppdebaeseDB.tools[toolKey] end,
             function(value) HoppdebaeseDB.tools[toolKey] = value end)
     end
@@ -2127,7 +2146,7 @@ local function CreateSettingsWindow()
         addon:ShowChallenge("manual")
     end)
 
-    local reset = CreateWindowResetButton(frame, "settings", 420, 670, "CENTER", "CENTER", 0, 0)
+    local reset = CreateWindowResetButton(frame, "settings", 420, 700, "CENTER", "CENTER", 0, 0)
     reset:SetPoint("BOTTOM", 0, 18)
 
     frame:Hide()
