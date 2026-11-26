@@ -31,6 +31,9 @@ and colors low amounts green through high amounts red. Every settled challenge
 is added to the persistent Todo window, which opens automatically after the roll.
 The compact Todo panel contains only each icon, challenge, and completion action.
 It can be resized down to a small translucent list and left open; its geometry is saved.
+Its Sort button cycles insertion order, A-Z, Z-A, and category order. Category
+sorting groups Exercises, Easy challenges, Cats, and Significant Other, then
+sorts challenge names A-Z so repeated exercises stay together.
 Complete challenges there to credit
 daily and all-time progress. **Replace Exercise (Session)** replaces the latest
 Todo entry and excludes that physical exercise until relogging. Open **Rested**
@@ -47,6 +50,10 @@ awards one persistent **Fuultier token**. Three tokens can skip one physical exe
 Todo without crediting its amount or completion. Cat and wellness challenges
 never award tokens and never show the token Skip action. Token totals are shown
 in both Todo and Settings.
+
+The Todo footer highlights the completed **Rüssel strichle** count. Pending
+Rüssel entries show the event that produced them, and completion uses one of
+four dedicated Rüssel quotes instead of the general quote pool.
 
 When all available exercises are complete or resting, future boxes offer lighter
 wellness prompts plus any enabled cat or significant-other prompts.

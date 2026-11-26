@@ -22,6 +22,7 @@ local DEFAULTS = {
     announceCompletion = true,
     promptCooldowns = {},
     todo = {},
+    todoSort = "added",
     nextTodoID = 0,
     daily = {
         date = "",
@@ -275,6 +276,33 @@ local COMPLETION_QUOTES = {
     "Gopferdammi, das isch jetzt aber würkli stabil gsi",
     "Bünzli-approved: korrekt usgführt und sauber abghakt",
     "Mehr Gains als Cumulus-Pünkt, das muess mer ersch würke",
+    "Dä Charakter isch Level 60, dini Wösch immer no Level 1",
+    "Gratuliere, du hesch 30 Sekunde nöd uf dä Bildschirm gluegt",
+    "Dä /played Counter het grad leise gseufzt",
+    "Sogar dini Zimmerpflanze fragt, ob du mal usegahsch",
+    "Epic Mount gha, aber zum Chüelschrank laufe isch Endgame",
+    "De Rücken kennt dini Gaming-Session besser als dini Gilde",
+    "Touch Grass wär jetzt tatsächlich im Questlog",
+    "Dini Chatz het agfange, mit em NPC z rede",
+    "Server First: Einmal vom Stuehl ufgstande",
+    "Du hesch meh Spielzyt als Sonneliecht, aber immerhin die Üebig",
+    "Dä Stuehl het scho Anspruch uf Mitbesitz agmeldet",
+    "Logout isch au e valide Cooldown, nur so als Info",
+    "Morn het dä Charakter Rested XP, du aber nöd",
+    "Dini Tastatur kennt meh Berührige als frische Luft",
+    "Achievement: Kreislauf kurz daran erinnert, dass er existiert",
+    "Dä Ladebildschirm isch nöd als Pause zählt, Kolleg",
+    "Gilde online, Soziallebe im Wartungsmodus",
+    "Noch ein Level und dä Bürostuehl verlangt Schmerzensgeld",
+    "Dini Augen händ grad e Ticket bim Support eröffnet",
+    "Stark gmacht. Jetzt villicht das echte Fenster statt Windows öffne",
+}
+
+local RUSSEL_COMPLETION_QUOTES = {
+    "De hesch richtig guet gstrichlet",
+    "You failed NNN, dä Rüssel het gwunne",
+    "Rüssel certified: samtweich abgliferet",
+    "So sanft gstrichlet, dä Rüssel git 10 vo 10",
 }
 
 -- Goals cap how much of one movement can be assigned in a calendar day. They
@@ -330,10 +358,15 @@ local MESSAGE_PREFIX = "HOPPDEBASE"
 local CHALLENGE_BY_CODE = {}
 local CHALLENGE_BY_ID = {}
 local ALL_CHALLENGES = {}
+local CHALLENGE_CATEGORY = {}
 for _, challenge in ipairs(EXERCISES) do table.insert(ALL_CHALLENGES, challenge) end
 for _, challenge in ipairs(EASY_CHALLENGES) do table.insert(ALL_CHALLENGES, challenge) end
 for _, challenge in ipairs(CAT_CHALLENGES) do table.insert(ALL_CHALLENGES, challenge) end
 for _, challenge in ipairs(SIGNIFICANT_OTHER_CHALLENGES) do table.insert(ALL_CHALLENGES, challenge) end
+for _, challenge in ipairs(EXERCISES) do CHALLENGE_CATEGORY[challenge.id] = 1 end
+for _, challenge in ipairs(EASY_CHALLENGES) do CHALLENGE_CATEGORY[challenge.id] = 2 end
+for _, challenge in ipairs(CAT_CHALLENGES) do CHALLENGE_CATEGORY[challenge.id] = 3 end
+for _, challenge in ipairs(SIGNIFICANT_OTHER_CHALLENGES) do CHALLENGE_CATEGORY[challenge.id] = 4 end
 for _, challenge in ipairs(ALL_CHALLENGES) do
     CHALLENGE_BY_CODE[challenge.code] = challenge
     CHALLENGE_BY_ID[challenge.id] = challenge
@@ -765,7 +798,10 @@ end
 
 local function RefreshFuultierTokens()
     local amount = math.max(0, math.floor(tonumber(HoppdebaeseDB.fuultierTokens) or 0))
-    if addon.todoTokenText then addon.todoTokenText:SetText("Fuultier tokens: " .. amount) end
+    local russelCount = math.max(0, math.floor(tonumber(HoppdebaeseDB.completionCounts.elephant) or 0))
+    if addon.todoTokenText then
+        addon.todoTokenText:SetText("Fuultier tokens: " .. amount .. "  |  |cffffc74dRüssel: " .. russelCount .. "|r")
+    end
     if addon.settingsTokenText then addon.settingsTokenText:SetText("Fuultier tokens: " .. amount) end
 end
 
@@ -791,11 +827,12 @@ local function CompleteTodo(todoID)
                 RefreshFuultierTokens()
             end
             if HoppdebaeseDB.announceCompletion and IsInGuild() and type(SendChatMessage) == "function" then
+                local quotePool = item.id == "elephant" and RUSSEL_COMPLETION_QUOTES or COMPLETION_QUOTES
                 SendChatMessage(string.format(
                     "Hoppdebäse completed from %s: %s - %s",
                     item.eventLabel or (TRIGGER_INFO[item.trigger] and TRIGGER_INFO[item.trigger].title) or "Workout Challenge",
                     item.text,
-                    Pick(COMPLETION_QUOTES)
+                    Pick(quotePool)
                 ), "GUILD")
             end
             RemoveTodo(todoID)
@@ -823,6 +860,35 @@ local function AddTodo(challenge)
     table.insert(HoppdebaeseDB.todo, item)
     addon.currentTodoID = item.todoID
     if addon.RefreshTodo then addon:RefreshTodo() end
+end
+
+local TODO_SORT_SEQUENCE = { "added", "az", "za", "category" }
+local TODO_SORT_LABELS = {
+    added = "Added",
+    az = "A-Z",
+    za = "Z-A",
+    category = "Category",
+}
+
+local function GetSortedTodoItems()
+    local items = {}
+    for index, item in ipairs(HoppdebaeseDB.todo) do items[index] = item end
+    local mode = TODO_SORT_LABELS[HoppdebaeseDB.todoSort] and HoppdebaeseDB.todoSort or "added"
+    if mode == "added" then return items end
+
+    table.sort(items, function(left, right)
+        local leftName = string.lower(left.name or left.text or "")
+        local rightName = string.lower(right.name or right.text or "")
+        if mode == "category" then
+            local leftCategory = CHALLENGE_CATEGORY[left.id] or 99
+            local rightCategory = CHALLENGE_CATEGORY[right.id] or 99
+            if leftCategory ~= rightCategory then return leftCategory < rightCategory end
+        end
+        if leftName == rightName then return (tonumber(left.todoID) or 0) < (tonumber(right.todoID) or 0) end
+        if mode == "za" then return leftName > rightName end
+        return leftName < rightName
+    end)
+    return items
 end
 
 local function AddBackdrop(frame, opacity)
@@ -1512,7 +1578,7 @@ end
 
 local function CreateTodoWindow()
     local frame = CreateFrame("Frame", "HoppdebaeseTodo", UIParent, BACKDROP_TEMPLATE)
-    frame:SetSize(math.max(HoppdebaeseDB.todoWindow.width, 240), math.max(HoppdebaeseDB.todoWindow.height, 110))
+    frame:SetSize(math.max(HoppdebaeseDB.todoWindow.width, 360), math.max(HoppdebaeseDB.todoWindow.height, 110))
     frame:SetPoint(
         HoppdebaeseDB.todoWindow.point,
         UIParent,
@@ -1525,9 +1591,9 @@ local function CreateTodoWindow()
     frame:SetMovable(true)
     frame:SetResizable(true)
     if frame.SetResizeBounds then
-        frame:SetResizeBounds(240, 110)
+        frame:SetResizeBounds(360, 110)
     else
-        frame:SetMinResize(240, 110)
+        frame:SetMinResize(360, 110)
     end
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -1576,7 +1642,7 @@ local function CreateTodoWindow()
     addon.todoRows = {}
 
     local function LayoutTodo()
-        local contentWidth = math.max(205, frame:GetWidth() - 42)
+        local contentWidth = math.max(325, frame:GetWidth() - 42)
         content:SetWidth(contentWidth)
         for _, row in ipairs(addon.todoRows) do row:SetWidth(contentWidth - 5) end
     end
@@ -1585,7 +1651,7 @@ local function CreateTodoWindow()
         if not self.todoRows then return end
         for _, row in ipairs(self.todoRows) do row:Hide() end
 
-        for index, item in ipairs(HoppdebaeseDB.todo) do
+        for index, item in ipairs(GetSortedTodoItems()) do
             local row = self.todoRows[index]
             if not row then
                 row = CreateFrame("Frame", nil, self.todoContent)
@@ -1620,7 +1686,12 @@ local function CreateTodoWindow()
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", 1, -((index - 1) * 32))
             row.icon:SetTexture(item.icon)
-            row.text:SetText(item.text)
+            if item.id == "elephant" then
+                local source = item.eventLabel or (TRIGGER_INFO[item.trigger] and TRIGGER_INFO[item.trigger].title) or "Unknown source"
+                row.text:SetText(item.text .. " |cffffc74d[" .. source .. "]|r")
+            else
+                row.text:SetText(item.text)
+            end
             row.complete.todoID = item.todoID
             row.skip.todoID = item.todoID
             if DAILY_GOALS[item.id] then
@@ -1636,6 +1707,9 @@ local function CreateTodoWindow()
         self.todoContent:SetHeight(math.max(1, count * 32))
         self.todoSubtitle:SetText("(" .. count .. ")")
         if self.todoButton then self.todoButton:SetText("Todo (" .. count .. ")") end
+        if self.todoSortButton then
+            self.todoSortButton:SetText("Sort: " .. TODO_SORT_LABELS[HoppdebaeseDB.todoSort or "added"])
+        end
         RefreshFuultierTokens()
     end
 
@@ -1655,6 +1729,20 @@ local function CreateTodoWindow()
     end)
     reset:SetSize(82, 20)
     reset:SetPoint("TOPRIGHT", -35, -7)
+
+    local sort = CreateButton(frame, "", 100)
+    sort:SetSize(100, 20)
+    sort:SetPoint("BOTTOMRIGHT", -28, 7)
+    sort:SetScript("OnClick", function()
+        local currentIndex = 1
+        for index, mode in ipairs(TODO_SORT_SEQUENCE) do
+            if mode == HoppdebaeseDB.todoSort then currentIndex = index break end
+        end
+        HoppdebaeseDB.todoSort = TODO_SORT_SEQUENCE[(currentIndex % #TODO_SORT_SEQUENCE) + 1]
+        addon:RefreshTodo()
+    end)
+    AttachTooltip(sort, "Sort Todo", "Cycles through Added, A-Z, Z-A, and Category. Category groups Exercises, Easy, Cats, and Significant Other, then sorts challenge names A-Z.")
+    addon.todoSortButton = sort
 
     local resize = CreateFrame("Button", nil, frame)
     resize:SetSize(20, 20)
@@ -1791,6 +1879,7 @@ local function BuildHelpText()
         "|cffffffffReplace Exercise (Session)|r - Replaces the current Todo challenge and excludes that physical exercise until you relog. Use Rested to undo it.",
         "|cffffffffMinimize|r - Hides the challenge box without removing its Todo entry.",
         "|cffffffffTodo|r - Opens automatically after a roll and lists pending challenges. It can be resized and left open; Complete credits progress.",
+        "|cffffffffSort Todo|r - Cycles Added, A-Z, Z-A, and Category. Category groups Exercises, Easy, Cats, and Significant Other, then sorts each group A-Z.",
         "|cffffffffRested|r - Lists exercises excluded for this login session. Restore makes one available again.",
         "|cffffffffProgress|r - Shows daily caps, session-rested status, and all-time totals.",
         "|cffffffffLeaderboard|r - Requests and displays participating guild members' totals.",
@@ -1817,6 +1906,7 @@ local function BuildHelpText()
         "|cffffffffSignificant other|r - Adds an untimed quality-time prompt when enabled.",
         "|cffffffffRoll announcement|r - Posts the selected challenge and originating event to guild chat.",
         "|cffffffffCompletion announcement|r - Posts the completed challenge, event, and a random Swiss-German message.",
+        "|cffffffffRüssel strichle|r - Todo shows the challenge source and a highlighted completed counter. Completing it uses a dedicated Rüssel quote.",
         "|cffffffffFuultier tokens|r - Completing a physical exercise rolled within the top 10% of its maximum awards 1 token. Spend 3 tokens to skip one Todo exercise. Wellness and cat challenges never award tokens.",
         "|cffffffffWorkout bench|r - Enables bench presses and helps unlock seated shoulder presses.",
         "|cffffffffPull-up bar|r - Enables pull-ups and dead hangs.",

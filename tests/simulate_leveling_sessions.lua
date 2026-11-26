@@ -28,13 +28,17 @@ assert(catWeightCount == 3, "All cat challenges must use 1.2 selection weight")
 local completionQuoteBlock = assert(addonSource:match("local COMPLETION_QUOTES = {(.-)\n}"), "Completion quotes are missing")
 local completionQuoteCount = 0
 for _ in completionQuoteBlock:gmatch('\n%s*"') do completionQuoteCount = completionQuoteCount + 1 end
-assert(completionQuoteCount == 68, "Completion quote pool must contain 68 messages")
+assert(completionQuoteCount == 88, "Completion quote pool must contain 88 messages")
 for _, name in ipairs({ "Obama", "Gandhi", "Richi", "Sam Altman" }) do
     assert(completionQuoteBlock:find(name, 1, true), name .. " completion quote is missing")
 end
 for _, phrase in ipairs({ "Früener hämmer", "OMEGALUL", "6 7 Reps", "Gopferdammi" }) do
     assert(completionQuoteBlock:find(phrase, 1, true), phrase .. " quote style is missing")
 end
+local russelQuoteBlock = assert(addonSource:match("local RUSSEL_COMPLETION_QUOTES = {(.-)\n}"), "Rüssel completion quotes are missing")
+local russelQuoteCount = 0
+for _ in russelQuoteBlock:gmatch('\n%s*"') do russelQuoteCount = russelQuoteCount + 1 end
+assert(russelQuoteCount == 4 and russelQuoteBlock:find("De hesch richtig guet gstrichlet", 1, true), "Rüssel completion quote pool is incomplete")
 for line in addonSource:gmatch("[^\n]+") do
     local id, name, unit = line:match('id = "([^"]+)".-name = "([^"]+)".-unit = "([^"]+)"')
     if id then challengeInfo[id] = { name = name, unit = unit } end
@@ -557,7 +561,8 @@ HoppdebaeseDB.todo = {
 }
 tokenSession.addon:RefreshTodo()
 assert(not tokenSession.addon.todoRows[1].skip:IsShown(), "Cat challenge displayed an exercise Skip button")
-assert(tokenSession.addon.todoTokenText.text == "Fuultier tokens: 0", "Todo token counter is incorrect")
+assert(tokenSession.addon.todoTokenText.text:find("Fuultier tokens: 0", 1, true), "Todo token counter is incorrect")
+assert(tokenSession.addon.todoTokenText.text:find("Rüssel: 0", 1, true), "Todo Rüssel counter is missing")
 HoppdebaeseDB.todo = {}
 HoppdebaeseDB.fuultierTokens = 2
 savedDB = HoppdebaeseDB
@@ -651,14 +656,49 @@ local catCounts = { catPlay = 0, catPets = 0, catLitter = 0 }
 local mainFrame = assert(distributionSession.named.HoppdebaeseBoxFrame)
 local todoFrame = assert(distributionSession.named.HoppdebaeseTodo)
 assert(todoFrame.backdropColor and todoFrame.backdropColor[4] == 0.38, "Todo backdrop is not sufficiently translucent")
-todoFrame:SetSize(240, 110)
+todoFrame:SetSize(360, 110)
 todoFrame.scripts.OnSizeChanged(todoFrame)
-assert(distributionSession.addon.todoContent:GetWidth() >= 205, "Compact Todo layout became too narrow")
+assert(distributionSession.addon.todoContent:GetWidth() >= 325, "Compact Todo layout became too narrow")
 local originalTodoWidth = distributionSession.addon.todoContent:GetWidth()
 todoFrame:SetSize(700, 520)
 todoFrame.scripts.OnSizeChanged(todoFrame)
 assert(distributionSession.addon.todoContent:GetWidth() > originalTodoWidth, "Todo content did not follow window resize")
 assert(HoppdebaeseDB.todoWindow.width == 700 and HoppdebaeseDB.todoWindow.height == 520, "Todo size was not saved")
+
+HoppdebaeseDB.todo = {
+    { todoID = 1, id = "pushups", name = "Push-ups", text = "20 push-ups", icon = "" },
+    { todoID = 2, id = "water", name = "Glasses of water", text = "Drink water", icon = "" },
+    { todoID = 3, id = "lunges", name = "Lunges", text = "10 forward lunges", icon = "" },
+    { todoID = 4, id = "catPets", name = "Cat pets", text = "Give each cat 20 pets", icon = "" },
+    { todoID = 5, id = "lunges", name = "Lunges", text = "15 forward lunges", icon = "" },
+}
+local originalTodoOrder = { 1, 2, 3, 4, 5 }
+local function assertTodoRows(expected, message)
+    for index, text in ipairs(expected) do
+        assert(distributionSession.addon.todoRows[index].text.text == text, message .. " at row " .. index)
+    end
+    for index, todoID in ipairs(originalTodoOrder) do
+        assert(HoppdebaeseDB.todo[index].todoID == todoID, "Todo sorting mutated saved order")
+    end
+end
+HoppdebaeseDB.todoSort = "added"
+distributionSession.addon:RefreshTodo()
+assertTodoRows({ "20 push-ups", "Drink water", "10 forward lunges", "Give each cat 20 pets", "15 forward lunges" }, "Added sorting failed")
+distributionSession.addon.todoSortButton.scripts.OnClick(distributionSession.addon.todoSortButton)
+assert(HoppdebaeseDB.todoSort == "az", "Sort button did not select A-Z")
+assertTodoRows({ "Give each cat 20 pets", "Drink water", "10 forward lunges", "15 forward lunges", "20 push-ups" }, "A-Z sorting failed")
+distributionSession.addon.todoSortButton.scripts.OnClick(distributionSession.addon.todoSortButton)
+assertTodoRows({ "20 push-ups", "10 forward lunges", "15 forward lunges", "Drink water", "Give each cat 20 pets" }, "Z-A sorting failed")
+distributionSession.addon.todoSortButton.scripts.OnClick(distributionSession.addon.todoSortButton)
+assertTodoRows({ "10 forward lunges", "15 forward lunges", "20 push-ups", "Drink water", "Give each cat 20 pets" }, "Category sorting failed")
+HoppdebaeseDB.todo = {
+    { todoID = 6, id = "elephant", name = "Rüssel strichle", text = "Gang di Rüssel go strichle", icon = "", eventLabel = "Dungeon Complete Challenge" },
+}
+distributionSession.addon:RefreshTodo()
+assert(distributionSession.addon.todoRows[1].text.text:find("Dungeon Complete Challenge", 1, true), "Rüssel Todo omitted its source")
+HoppdebaeseDB.todo = {}
+HoppdebaeseDB.todoSort = "added"
+distributionSession.addon:RefreshTodo()
 
 -- Primary and secondary profession slots trigger the mixed Easy pool at multiples of ten.
 for index, expectedName in ipairs({ "Alchemy", "Fishing", "Cooking", "First Aid" }) do
@@ -931,5 +971,36 @@ HoppdebaeseDB.announceCompletion = false
 completionButton = findButton(distributionSession.frames, "Complete")
 completionButton.scripts.OnClick(completionButton)
 assert(#guildMessages == 2, "Disabled completion announcements still sent a message")
+
+HoppdebaeseDB.announceCompletion = true
+local russelCompletionsBefore = tonumber(HoppdebaeseDB.completionCounts.elephant) or 0
+HoppdebaeseDB.todo = {
+    {
+        todoID = 9999,
+        id = "elephant",
+        name = "Rüssel strichle",
+        text = "Gang di Rüssel go strichle",
+        amount = 1,
+        unit = "times",
+        icon = "",
+        eventLabel = "Player Death Challenge",
+    },
+}
+distributionSession.addon:RefreshTodo()
+assert(distributionSession.addon.todoRows[1].text.text:find("Player Death Challenge", 1, true), "Rüssel source was not displayed")
+distributionSession.addon.todoRows[1].complete.scripts.OnClick(distributionSession.addon.todoRows[1].complete)
+assert((tonumber(HoppdebaeseDB.completionCounts.elephant) or 0) == russelCompletionsBefore + 1, "Rüssel counter did not increment")
+assert(distributionSession.addon.todoTokenText.text:find("Rüssel: " .. (russelCompletionsBefore + 1), 1, true), "Highlighted Rüssel counter did not refresh")
+assert(#guildMessages == 3, "Rüssel completion announcement missing")
+local customQuoteUsed = false
+for _, quote in ipairs({
+    "De hesch richtig guet gstrichlet",
+    "You failed NNN, dä Rüssel het gwunne",
+    "Rüssel certified: samtweich abgliferet",
+    "So sanft gstrichlet, dä Rüssel git 10 vo 10",
+}) do
+    if guildMessages[3].message:find(quote, 1, true) then customQuoteUsed = true break end
+end
+assert(customQuoteUsed, "Rüssel completion did not use its custom quote pool")
 
 print("ALL_DIFFICULTIES_SIMULATION_PASS")
